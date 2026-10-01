@@ -224,3 +224,105 @@ describe("Graphite Grades Foundation V1 -- Mark material variant decode", () => 
     expect(artwork.marks[0].material).not.toHaveProperty("profileVersion");
   });
 });
+
+describe("BLACKBOOK Spray Physicality V1 -- tMs/pressure/capId decode round trip", () => {
+  it("decodes a local-2d stroke Mark's point tMs and pressure", () => {
+    const time = Timestamp.fromDate(new Date("2026-01-01T00:00:00Z"));
+    const artwork = decodeArtworkData("spray-physicality-1", {
+      creatorId: "member-1", createdAt: time, updatedAt: time,
+      surfaceId: "blackbook:studio-rich-main:page:page-1",
+      composition: { bounds: { minX: 0.1, minY: 0.2, maxX: 0.3, maxY: 0.4 }, startedAt: time, lastEditedAt: time },
+      marks: [{
+        id: "spray-mark-1", type: "stroke", createdAt: time,
+        geometry: {
+          format: "local-2d-stroke-v1",
+          points: [{ x: 0.1, y: 0.2, tMs: 0, pressure: 0.4 }, { x: 0.3, y: 0.4, tMs: 42, pressure: 0.75 }],
+        },
+        style: { color: "#e2572b", width: 24, opacity: 0.6 },
+        material: { supplyId: "spray", materialId: "spray" },
+      }],
+      state: "draft", visibility: "private",
+    });
+    const mark = artwork.marks[0];
+    expect(mark.type === "stroke" && mark.geometry.format === "local-2d-stroke-v1" ? mark.geometry.points : []).toEqual([
+      { x: 0.1, y: 0.2, tMs: 0, pressure: 0.4 },
+      { x: 0.3, y: 0.4, tMs: 42, pressure: 0.75 },
+    ]);
+  });
+
+  it("decodes a local-2d material-erasure Mark's point tMs and pressure too", () => {
+    const time = Timestamp.fromDate(new Date("2026-01-01T00:00:00Z"));
+    const artwork = decodeArtworkData("spray-physicality-erase", {
+      creatorId: "member-1", createdAt: time, updatedAt: time,
+      surfaceId: "blackbook:studio-rich-main:page:page-1",
+      composition: { bounds: { minX: 0.1, minY: 0.2, maxX: 0.3, maxY: 0.4 }, startedAt: time, lastEditedAt: time },
+      marks: [{
+        id: "erase-physicality-1", type: "material-erasure", createdAt: time,
+        geometry: { format: "local-2d-erasure-v1", points: [{ x: 0.2, y: 0.3, tMs: 10, pressure: 0.6 }, { x: 0.25, y: 0.35, tMs: 18, pressure: 0.65 }] },
+        targetMaterialId: "graphite", width: 28,
+      }],
+      state: "draft", visibility: "private",
+    });
+    const mark = artwork.marks[0];
+    expect(mark.type === "material-erasure" && mark.geometry.format === "local-2d-erasure-v1" ? mark.geometry.points : []).toEqual([
+      { x: 0.2, y: 0.3, tMs: 10, pressure: 0.6 },
+      { x: 0.25, y: 0.35, tMs: 18, pressure: 0.65 },
+    ]);
+  });
+
+  it("a legacy local-2d point without tMs/pressure decodes with no such properties at all", () => {
+    const time = Timestamp.fromDate(new Date("2026-01-01T00:00:00Z"));
+    const artwork = decodeArtworkData("spray-physicality-legacy", {
+      creatorId: "member-1", createdAt: time, updatedAt: time,
+      surfaceId: "blackbook:studio-rich-main:page:page-1",
+      composition: { bounds: { minX: 0.1, minY: 0.2, maxX: 0.3, maxY: 0.4 }, startedAt: time, lastEditedAt: time },
+      marks: [{
+        id: "legacy-spray-mark", type: "stroke", createdAt: time,
+        geometry: { format: "local-2d-stroke-v1", points: [{ x: 0.1, y: 0.2 }, { x: 0.3, y: 0.4 }] },
+        style: { color: "#e2572b", width: 24, opacity: 0.6 },
+        material: { supplyId: "spray", materialId: "spray" },
+      }],
+      state: "draft", visibility: "private",
+    });
+    const mark = artwork.marks[0];
+    const points = mark.type === "stroke" && mark.geometry.format === "local-2d-stroke-v1" ? mark.geometry.points : [];
+    for (const point of points) {
+      expect(point).not.toHaveProperty("tMs");
+      expect(point).not.toHaveProperty("pressure");
+    }
+  });
+
+  it("decodes a Spray Mark's material capId", () => {
+    const time = Timestamp.fromDate(new Date("2026-01-01T00:00:00Z"));
+    const artwork = decodeArtworkData("spray-capid-1", {
+      creatorId: "member-1", createdAt: time, updatedAt: time,
+      surfaceId: "blackbook:studio-rich-main:page:page-1",
+      composition: { bounds: { minX: 0.1, minY: 0.2, maxX: 0.3, maxY: 0.4 }, startedAt: time, lastEditedAt: time },
+      marks: [{
+        id: "spray-fat-1", type: "stroke", createdAt: time,
+        geometry: { format: "local-2d-stroke-v1", points: [{ x: 0.1, y: 0.2 }, { x: 0.3, y: 0.4 }] },
+        style: { color: "#e2572b", width: 24, opacity: 0.6 },
+        material: { supplyId: "spray", materialId: "spray", capId: "studiorich-fat" },
+      }],
+      state: "draft", visibility: "private",
+    });
+    expect(artwork.marks[0]).toMatchObject({ material: { supplyId: "spray", materialId: "spray", capId: "studiorich-fat" } });
+  });
+
+  it("a legacy Spray Mark (no capId) decodes without inventing one", () => {
+    const time = Timestamp.fromDate(new Date("2026-01-01T00:00:00Z"));
+    const artwork = decodeArtworkData("spray-capid-legacy", {
+      creatorId: "member-1", createdAt: time, updatedAt: time,
+      surfaceId: "blackbook:studio-rich-main:page:page-1",
+      composition: { bounds: { minX: 0.1, minY: 0.2, maxX: 0.3, maxY: 0.4 }, startedAt: time, lastEditedAt: time },
+      marks: [{
+        id: "spray-legacy-1", type: "stroke", createdAt: time,
+        geometry: { format: "local-2d-stroke-v1", points: [{ x: 0.1, y: 0.2 }, { x: 0.3, y: 0.4 }] },
+        style: { color: "#e2572b", width: 24, opacity: 0.6 },
+        material: { supplyId: "spray", materialId: "spray" },
+      }],
+      state: "draft", visibility: "private",
+    });
+    expect(artwork.marks[0].material).not.toHaveProperty("capId");
+  });
+});

@@ -424,12 +424,24 @@ save/member ownership
 
 **Current spray/mop status**: `SPRAY_SUPPLY`/`MOP_SUPPLY` already exist as
 real, canonical drawing supplies in the shared Art Supply set (§3) and are
-already usable on Blackbook today — as ordinary stroke-style
-(color/width/opacity) tools, not a physical wet-paint/drip simulation. The
-richer "authentic spray/drip" *behavior* referenced above (hand tracking,
-person segmentation, a wet-drip physics engine, cap/nozzle simulation)
+already usable on Blackbook today. Spray is already a real, deterministic
+aerosol deposition engine (`music/src/member/sprayDeposition.ts`) with
+genuine cap/nozzle simulation in production — two data-driven
+`SprayCapProfile`s, `STUDIORICH_STOCK_CAP` and `STUDIORICH_FAT_CAP`, each
+with a distinct physical footprint, particle density, core/edge behavior,
+and velocity/pressure response — not merely a stroke-style (color/width/
+opacity) tool. Mop remains a stroke-style tool, not a physical wet-paint/
+drip simulation. The richer "authentic spray/drip" *behavior* referenced
+above (hand tracking, person segmentation, a wet-drip physics engine) still
 exists only in the separate `prototypes/spatial-spraypaint/` prototype,
-which `blackbook.html` explicitly does **not** import or depend on (§2).
+which `blackbook.html` explicitly does **not** import or depend on (§2) —
+that prototype's own, much larger (~1700-line) multi-cap engine
+(`SprayBrushEngine.ts`/`SprayCapProfile.ts`/`SprayCapPresets.ts`, ~19 named
+physical/effect caps with distance/velocity calibration) is a distinct,
+unrelated implementation from Blackbook's own `sprayDeposition.ts` cap
+profiles described above — Blackbook borrows only one proven idea from it
+(a seeded PRNG for deterministic particle scatter), never its code or cap
+set.
 
 **Montana palette data**: an existing, real Montana Gold 400ml swatch/
 catalog dataset was found at

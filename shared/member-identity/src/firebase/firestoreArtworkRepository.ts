@@ -52,7 +52,16 @@ function decodeLocalPoint(value: unknown): LocalArtworkPoint {
   if (!value || typeof value !== "object") throw new Error("invalid_artwork_point");
   const point = value as Record<string, unknown>;
   if (!Number.isFinite(point.x) || !Number.isFinite(point.y)) throw new Error("invalid_artwork_point");
-  return { x: point.x as number, y: point.y as number };
+  return {
+    x: point.x as number,
+    y: point.y as number,
+    // BLACKBOOK Spray Physicality V1 -- additive, optional capture fields
+    // (see LocalArtworkPoint's own doc). Absent entirely on a legacy point,
+    // never invented -- same pattern as material.variantId/profileVersion
+    // below.
+    ...(Number.isFinite(point.tMs) ? { tMs: point.tMs as number } : {}),
+    ...(Number.isFinite(point.pressure) ? { pressure: point.pressure as number } : {}),
+  };
 }
 
 function decodeMark(value: unknown): ArtworkMark {
@@ -98,6 +107,12 @@ function decodeMark(value: unknown): ArtworkMark {
       ...(typeof material.variantId === "string" && Number.isFinite(material.profileVersion)
         ? { variantId: material.variantId, profileVersion: material.profileVersion as number }
         : {}),
+      // BLACKBOOK Spray Physicality V1 -- which SprayCapProfile authored
+      // this Mark's deposition (see MarkMaterialIdentity.capId's own doc).
+      // Independent of variantId/profileVersion (never paired), absent on
+      // every legacy Spray Mark and every non-Spray supply -- never
+      // synthesized.
+      ...(typeof material.capId === "string" ? { capId: material.capId } : {}),
     } } : {}),
   };
   const decoded: ArtworkMark = format === "local-2d-stroke-v1"

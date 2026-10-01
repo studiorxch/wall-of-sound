@@ -92,7 +92,17 @@ describe.skipIf(!reachable)("SPRAY PERSISTENCE V1 -- real Firestore emulator reg
       creatorId: uid, surfaceId: BLACKBOOK_PAGE_SURFACE_ID, mark, artworkType: "blank", pageFrame: BLACKBOOK_PAGE_FRAME,
     });
     expect(artwork.marks).toHaveLength(1);
-    expect(artwork.marks[0].geometry.points).toHaveLength(4000);
+    const savedMark = artwork.marks[0];
+    expect(savedMark.geometry.points).toHaveLength(4000);
+    // Spray Persistence Correctness -- the real regression this test guards:
+    // a previous decode-path defect silently dropped tMs/pressure from every
+    // point and capId from the material, so a point-count-only assertion
+    // passed even while the real round-tripped shape was wrong. Assert the
+    // complete shape, not just the count.
+    expect(savedMark.geometry.points[0]).toMatchObject({ tMs: 0, pressure: 0.5 });
+    expect(savedMark.geometry.points[1]).toMatchObject({ tMs: 8, pressure: 0.5 });
+    expect(savedMark.geometry.points[3999]).toMatchObject({ tMs: 3999 * 8, pressure: 0.5 });
+    expect(savedMark.type === "stroke" ? savedMark.material?.capId : undefined).toBe("studiorich-stock");
   }, 30000);
 
   it("documents the actual platform failure this batch fixed: an UNCAPPED Spray stroke (20,000 points, tMs+pressure) is rejected by Firestore's own rules-evaluation resource limit -- confirms the real root cause, not a guess", async () => {
