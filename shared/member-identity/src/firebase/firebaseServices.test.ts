@@ -1,8 +1,83 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import type { FirebaseApp } from "firebase/app";
 import {
   resolveStudioRichFirebaseEmulatorHost,
   shouldUseStudioRichFirebaseEmulators,
 } from "./firebaseServices.js";
+
+/**
+ * LAN CALIBRATION DEV PATH -- the pure `resolveStudioRichFirebaseEmulatorHost`
+ * tests above prove the RESOLUTION logic in isolation; they do NOT prove the
+ * resolved value actually reaches the Firebase SDK's own emulator-connection
+ * calls (`connectAuthEmulator`/`connectFirestoreEmulator`) -- the exact gap
+ * a 2026-10 real-device investigation needed closed, after the pure resolver
+ * and the Vite env-injection path were both independently confirmed correct
+ * but a real device still connected to 127.0.0.1. Mocking the SDK itself is
+ * the only way to assert the EXACT call `getStudioRichFirebaseServices`
+ * (the one function `createFirebaseMemberIdentityAuthority`/every
+ * repository factory actually calls, with whatever `environment` object
+ * their caller handed them, e.g. `blackbookRuntime.ts`'s `import.meta.env`)
+ * makes against the real SDK entry points -- the full wiring the browser
+ * runtime depends on, not just the host string's own derivation.
+ */
+vi.mock("firebase/auth", async () => {
+  const actual = await vi.importActual<typeof import("firebase/auth")>("firebase/auth");
+  return { ...actual, getAuth: vi.fn(() => ({ __fakeAuth: true })), connectAuthEmulator: vi.fn() };
+});
+vi.mock("firebase/firestore", async () => {
+  const actual = await vi.importActual<typeof import("firebase/firestore")>("firebase/firestore");
+  return { ...actual, getFirestore: vi.fn(() => ({ __fakeFirestore: true })), connectFirestoreEmulator: vi.fn() };
+});
+
+describe("getStudioRichFirebaseServices -- real SDK call wiring (not just the pure resolver)", () => {
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("calls connectAuthEmulator/connectFirestoreEmulator with a supplied LAN host override, exactly as a hosted real BLACKBOOK runtime's own import.meta.env would deliver it", async () => {
+    const { connectAuthEmulator } = await import("firebase/auth");
+    const { connectFirestoreEmulator } = await import("firebase/firestore");
+    const { getStudioRichFirebaseServices } = await import("./firebaseServices.js");
+
+    getStudioRichFirebaseServices({} as FirebaseApp, {
+      VITE_FIREBASE_USE_EMULATORS: "true",
+      VITE_FIREBASE_EMULATOR_HOST: "192.168.1.111",
+    });
+
+    expect(connectAuthEmulator).toHaveBeenCalledWith(
+      { __fakeAuth: true },
+      "http://192.168.1.111:9099",
+      { disableWarnings: true },
+    );
+    expect(connectFirestoreEmulator).toHaveBeenCalledWith({ __fakeFirestore: true }, "192.168.1.111", 8080);
+  });
+
+  it("falls back to 127.0.0.1 for both Auth and Firestore when no host override is supplied -- existing localhost behavior is unchanged end to end", async () => {
+    const { connectAuthEmulator } = await import("firebase/auth");
+    const { connectFirestoreEmulator } = await import("firebase/firestore");
+    const { getStudioRichFirebaseServices } = await import("./firebaseServices.js");
+
+    getStudioRichFirebaseServices({} as FirebaseApp, { VITE_FIREBASE_USE_EMULATORS: "true" });
+
+    expect(connectAuthEmulator).toHaveBeenCalledWith(
+      { __fakeAuth: true },
+      "http://127.0.0.1:9099",
+      { disableWarnings: true },
+    );
+    expect(connectFirestoreEmulator).toHaveBeenCalledWith({ __fakeFirestore: true }, "127.0.0.1", 8080);
+  });
+
+  it("never calls either emulator-connection function at all when emulator mode is off -- a host override alone has zero effect, and production is never touched", async () => {
+    const { connectAuthEmulator } = await import("firebase/auth");
+    const { connectFirestoreEmulator } = await import("firebase/firestore");
+    const { getStudioRichFirebaseServices } = await import("./firebaseServices.js");
+
+    getStudioRichFirebaseServices({} as FirebaseApp, { VITE_FIREBASE_EMULATOR_HOST: "192.168.1.111" });
+
+    expect(connectAuthEmulator).not.toHaveBeenCalled();
+    expect(connectFirestoreEmulator).not.toHaveBeenCalled();
+  });
+});
 
 describe("shouldUseStudioRichFirebaseEmulators", () => {
   it("defaults to production services", () => {
