@@ -43,7 +43,7 @@ import {
   GRAPHITE_PROFILE_VERSION,
   type GraphiteGradeId,
 } from "./strokeSmoothing";
-import { resolveSprayCapProfile, resolveSprayDripPlans, hashSeed, DEFAULT_SPRAY_CAP_ID, STUDIORICH_STOCK_CAP, STUDIORICH_FAT_CAP } from "./sprayDeposition";
+import { resolveSprayCapProfile, resolveSprayDripPlans, hashSeed, DEFAULT_SPRAY_CAP_ID, STUDIORICH_STOCK_CAP, STUDIORICH_FAT_CAP, STUDIORICH_PRECISION_CAP, STUDIORICH_CALLIGRAPHY_CAP } from "./sprayDeposition";
 import { resolveMopDripPlans } from "./mopDeposition";
 import { createBlackbookHomeSurface } from "../home/blackbookHomeSurface";
 
@@ -121,6 +121,8 @@ const opacityContainer = required(document.querySelector<HTMLElement>("#blackboo
 const capContainer = required(document.querySelector<HTMLElement>("#blackbook-cap-container"), "blackbook_surface_missing");
 const capStockButton = required(document.querySelector<HTMLButtonElement>("#blackbook-cap-stock"), "blackbook_surface_missing");
 const capFatButton = required(document.querySelector<HTMLButtonElement>("#blackbook-cap-fat"), "blackbook_surface_missing");
+const capPrecisionButton = required(document.querySelector<HTMLButtonElement>("#blackbook-cap-precision"), "blackbook_surface_missing");
+const capCalligraphyButton = required(document.querySelector<HTMLButtonElement>("#blackbook-cap-calligraphy"), "blackbook_surface_missing");
 
 const ctx = required(canvas.getContext("2d"), "blackbook_canvas_unavailable");
 
@@ -1294,13 +1296,17 @@ gradeSelect.addEventListener("change", () => {
   if ((GRAPHITE_GRADE_ORDER as readonly string[]).includes(value)) activeGraphiteGrade = value as GraphiteGradeId;
 });
 
+const CAP_BUTTONS: readonly [HTMLButtonElement, string][] = [
+  [capStockButton, STUDIORICH_STOCK_CAP.id],
+  [capFatButton, STUDIORICH_FAT_CAP.id],
+  [capPrecisionButton, STUDIORICH_PRECISION_CAP.id],
+  [capCalligraphyButton, STUDIORICH_CALLIGRAPHY_CAP.id],
+];
 function selectSprayCap(capId: string): void {
   activeSprayCapId = capId;
-  capStockButton.setAttribute("aria-pressed", String(capId === STUDIORICH_STOCK_CAP.id));
-  capFatButton.setAttribute("aria-pressed", String(capId === STUDIORICH_FAT_CAP.id));
+  for (const [button, buttonCapId] of CAP_BUTTONS) button.setAttribute("aria-pressed", String(capId === buttonCapId));
 }
-capStockButton.addEventListener("click", () => selectSprayCap(STUDIORICH_STOCK_CAP.id));
-capFatButton.addEventListener("click", () => selectSprayCap(STUDIORICH_FAT_CAP.id));
+for (const [button, capId] of CAP_BUTTONS) button.addEventListener("click", () => selectSprayCap(capId));
 pencilButton.addEventListener("click", () => selectSupply("pencil"));
 penButton.addEventListener("click", () => selectSupply("pen"));
 markerButton.addEventListener("click", () => selectSupply("marker"));

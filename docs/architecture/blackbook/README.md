@@ -428,22 +428,26 @@ save/member ownership
 real, canonical drawing supplies in the shared Art Supply set (§3) and are
 already usable on Blackbook today. Spray is already a real, deterministic
 aerosol deposition engine (`music/src/member/sprayDeposition.ts`) with
-genuine cap/nozzle simulation in production — two data-driven
-`SprayCapProfile`s, `STUDIORICH_STOCK_CAP` and `STUDIORICH_FAT_CAP`, each
-with a distinct physical footprint, particle density, core/edge behavior,
-and velocity/pressure response — not merely a stroke-style (color/width/
-opacity) tool. Both Mop and Spray also have a real, deterministic DRIP
-seam now — see §11a. The richer "authentic spray/drip" *behavior* referenced
-above (hand tracking, person segmentation, a wet-drip physics engine) still
-exists only in the separate `prototypes/spatial-spraypaint/` prototype,
-which `blackbook.html` explicitly does **not** import or depend on (§2) —
-that prototype's own, much larger (~1700-line) multi-cap engine
-(`SprayBrushEngine.ts`/`SprayCapProfile.ts`/`SprayCapPresets.ts`, ~19 named
-physical/effect caps with distance/velocity calibration) is a distinct,
-unrelated implementation from Blackbook's own `sprayDeposition.ts` cap
-profiles described above — Blackbook borrows only one proven idea from it
-(a seeded PRNG for deterministic particle scatter), never its code or cap
-set.
+genuine cap/nozzle simulation in production — **four** data-driven
+`SprayCapProfile`s as of the SPRAY INSTRUMENT EXPRESSION PASS (§11b):
+`STUDIORICH_STOCK_CAP`, `STUDIORICH_FAT_CAP`, `STUDIORICH_PRECISION_CAP`,
+and `STUDIORICH_CALLIGRAPHY_CAP`, each with a distinct physical footprint,
+particle density, core/edge behavior, and velocity/pressure response — not
+merely a stroke-style (color/width/opacity) tool. Both Mop and Spray also
+have a real, deterministic DRIP seam now — see §11a. The richer "authentic
+spray/drip" *behavior* referenced above (hand tracking, person
+segmentation, a wet-drip physics engine) still exists only in the separate
+`prototypes/spatial-spraypaint/` prototype, which `blackbook.html`
+explicitly does **not** import or depend on (§2) — that prototype's own,
+much larger (~1700-line) multi-cap engine (`SprayBrushEngine.ts`/
+`SprayCapProfile.ts`/`SprayCapPresets.ts`, ~19 named physical/effect caps
+with distance/velocity calibration) is a distinct, unrelated implementation
+from Blackbook's own `sprayDeposition.ts` cap profiles described above —
+Blackbook borrows only one proven idea from it (a seeded PRNG for
+deterministic particle scatter), never its code or cap set. That same
+prototype also contains the only spray-sound code in this repository
+(`SprayCanAudio.ts`); it remains unimported, and BLACKBOOK has no spray
+audio playback wired in today — see §11b.
 
 ## 11a. DRIPS (current, established BLACKBOOK Deterministic Drips β0.1)
 
@@ -573,6 +577,112 @@ The eventual physical-planning workflow (private location photographs,
 real paint identities/catalog numbers, material lists, physical dimensions,
 location planning, public/private publishing) is **future/direction** —
 none of it is implemented.
+
+## 11b. SPRAY INSTRUMENT EXPRESSION PASS (current, established this batch)
+
+Scope: make Spray behave like an expressive instrument rather than a
+variable-width brush, and make it testable. **Not** a generic brush
+rewrite, **not** the ~19 historical cap concepts — see this batch's own
+brief for the full constraint set.
+
+**Input classification** (`sprayDeposition.ts`'s own module doc is the
+canonical copy of this): MEASURED — `x`/`y`, optional `tMs` (Spray only),
+optional `pressure` (Spray only, gated on a real per-stroke variance
+check). DERIVED — `densityFactor`/`flowFactor` (pre-existing), plus two
+new local, backward-only signals added this pass: `tailFlareFactor`
+(deceleration ratio of the last two segments — the RELEASE signal behind
+flare/rattle) and per-emission `instability` (direction-change angle
+between two consecutive short segments — the WET SPUTTER proxy). FUTURE
+SPATIAL (can X/Y/Z, wall distance, pitch/yaw/roll, angular velocity of the
+can) — still not implemented; `resolveSpraySoundState` reports it
+explicitly `{ available: false }` rather than fabricating a value.
+
+**Cap profile model, generalized**: `SprayCapProfile` gained seven new
+per-cap fields (`motionFootprintRange`, `flareResponse`, `dustResponse`,
+`speckleResponse`, `instabilityResponse`, `directionalResponse`,
+`nibAngleDeg`) that replace what were previously hardcoded engine
+constants (e.g. the core's own `clamp(meanDensity, 0.8, 1.2)` width clamp
+is now `clamp(meanDensity, 1 - cap.motionFootprintRange, 1 +
+cap.motionFootprintRange)`, with Stock's own value — 0.2 — reproducing the
+prior literal exactly, zero behavior change for any already-persisted
+Mark). **Two new caps**, the smallest representative set beyond
+Stock/Fat this batch's own brief allows:
+
+- `STUDIORICH_PRECISION_CAP` — narrow footprint, near-zero
+  `motionFootprintRange`/`flareResponse` so it genuinely "cannot become a
+  fat cap through gesture," for sustained hairline/detail work.
+- `STUDIORICH_CALLIGRAPHY_CAP` — the one cap with `directionalResponse >
+  0`: its CORE width depends on the gesture's own whole-stroke dominant
+  travel direction relative to a fixed `nibAngleDeg` (chisel-nib axis),
+  computed ONCE per gesture (never oscillated mid-stroke, so "artist
+  technique — which direction they drag — causes the variation," per this
+  batch's brief, not an automatic wobble). Every other cap has
+  `directionalResponse: 0` and is byte-identical to before this field
+  existed.
+
+All four caps remain a plain data registry (`SPRAY_CAP_PROFILES`) the
+engine reads generically — a future cap is still a new profile object, not
+a new rendering branch.
+
+**New deposition behavior, all bounded/deterministic/cap-gated** (0 for a
+0-valued response field means zero behavior change):
+
+- **FLARE** — a decelerating release at the gesture's own tail
+  (`tailFlareFactor`, local to the last two segments) spawns extra,
+  wider-flung particles there, scaled by `cap.flareResponse`. Fat responds
+  dramatically; Precision never flares at all.
+- **DUST** — fast/dispersed emissions (low `densityFactor`) spawn a few
+  extra, faint, far-flung particles beyond the normal footprint, scaled by
+  `cap.dustResponse` — emerges from the same aerosol model, not a separate
+  decorative stamp.
+- **SPECKLE** — dwelled emissions (high `densityFactor`, short of this
+  material's own drip threshold) spawn a few extra, larger, denser coarse
+  droplets mixed into the fine field, scaled by `cap.speckleResponse`
+  (deliberately exceeds the ordinary per-particle radius ceiling — see the
+  dedicated calibration-radius test's own documented exception).
+- **WET SPUTTER character** — local direction-change `instability` widens
+  per-particle count/radius/alpha variance, scaled by
+  `cap.instabilityResponse`.
+
+**Sound state, derivable but not played** (`resolveSpraySoundState`):
+BLACKBOOK has no spray audio playback today (§11's own note) and building
+one is out of this pass's bounded scope. This function instead derives,
+from the exact same gesture/material signals driving the visual
+deposition above, a pure/deterministic `SpraySoundState` — `aerosolIntensity`
+(flow/density), `sputterActive`/`sputterIntensity` (from `instability`,
+gated per-cap), `rattleActive`/`rattleIntensity` (mixing-ball rattle —
+gated on the SAME release/whip-snap signal flare uses, "visible
+justification in the resulting mark," never active merely because spray
+is on), `materialLoadNormalized` (reuses `dripDeposition.ts`'s own
+`resolveDripOrigins`, never a second load derivation), and `spatial: {
+available: false }`. No `AudioContext`, no I/O — fully unit-testable
+without ever playing a sound. A future playback layer keying off this
+state, and wiring real spray audio into BLACKBOOK at all, remain
+unimplemented.
+
+**Dev-only Spray Test / Calibration surface**: `music/blackbook-spray-test.html`,
+following this repo's existing `*-debug.html` dev-surface convention
+(`station-3d-debug.html`, `home-dev.html`). A byte-for-byte copy of
+`blackbook.html`'s own markup/CSS (same element ids) plus one addition — a
+purely decorative, `pointer-events: none`, non-persisted overlay labeling
+the calibration gestures (01 CLEAN LINE … 13 WHIP/SNAP, plus a large
+unrestricted TAG zone) from this batch's own brief. It loads
+`blackbookRuntime.ts` completely unchanged and reuses BLACKBOOK's real
+persistence/page model as-is (use NEW to start a dedicated test page, then
+DELETE it afterward) — no parallel drawing engine, no second persistence
+path.
+
+**What this pass deliberately leaves unfinished**: true per-segment
+(within-one-stroke) variable core width — the engine's one continuous
+`moveTo`/`lineTo` pass per core layer (the fix for the historical
+"dotted-pattern" regression, §11a's Revision 4) means width varies per
+PASS/per-gesture, not per point along one pass, without risking that
+regression; Calligraphy's directional response is therefore whole-gesture,
+not continuously oscillating within a single stroke (also the correct
+behavior per this batch's own "artist technique causes the variation, not
+automatic oscillation" instruction). No real can-distance/orientation
+input; no spray audio playback; no per-cap settings UI beyond the
+existing minimal four-button selector.
 
 ## 12. Known debt
 

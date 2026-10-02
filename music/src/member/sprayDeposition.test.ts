@@ -13,6 +13,7 @@ import {
   type SprayCapProfile,
 } from "./sprayDeposition";
 import { SPRAY_DRIP_TUNING } from "./dripDeposition";
+import { STUDIORICH_CALLIGRAPHY_CAP, STUDIORICH_PRECISION_CAP, resolveSpraySoundState } from "./sprayDeposition";
 
 describe("Spray aerosol engine -- determinism", () => {
   it("produces an identical particle plan for identical points/radius/seed/cap -- no Math.random anywhere", () => {
@@ -150,9 +151,11 @@ describe("Spray aerosol engine -- continuity on fast movement", () => {
 });
 
 describe("Spray aerosol engine -- Calibration V1 (smaller, denser, softer coverage field)", () => {
-  it("individual particle radius is a small fraction of the footprint radius (Stock Cap reads as a field, not a few big dots)", () => {
+  it("individual particle radius is a small fraction of the footprint radius (Stock Cap reads as a field, not a few big dots) -- SPECKLE's own deliberately-coarser droplets (SPRAY INSTRUMENT EXPRESSION PASS) are a bounded, documented exception to this ceiling, never the ordinary aerosol grain", () => {
     const plan = resolveSprayParticlePlan([{ x: 0, y: 0 }, { x: 20, y: 0 }], 20, hashSeed("calibration-radius"));
-    for (const particle of plan) expect(particle.radius).toBeLessThanOrEqual(20 * STUDIORICH_STOCK_CAP.particleRadiusRatio + 1e-9);
+    // Speckle's own ceiling: particleRadiusRatio * 1.7 * 1.2 (see its own formula in resolveSprayParticlePlan).
+    const speckleCeiling = 20 * STUDIORICH_STOCK_CAP.particleRadiusRatio * 1.7 * 1.2 + 1e-9;
+    for (const particle of plan) expect(particle.radius).toBeLessThanOrEqual(speckleCeiling);
   });
 
   it("particle radius has jitter -- not every particle in a plan is the exact same size", () => {
@@ -479,8 +482,13 @@ describe("BLACKBOOK Spray Physicality V1 -- cap personality", () => {
     expect(resolveSprayCapProfile("unknown-future-cap").id).toBe("studiorich-stock");
   });
 
-  it("SPRAY_CAP_PROFILES is a plain data registry containing both caps -- a future cap needs no new rendering branch", () => {
-    expect(Object.keys(SPRAY_CAP_PROFILES).sort()).toEqual(["studiorich-fat", "studiorich-stock"]);
+  it("SPRAY_CAP_PROFILES is a plain data registry containing every cap -- a future cap needs no new rendering branch", () => {
+    expect(Object.keys(SPRAY_CAP_PROFILES).sort()).toEqual([
+      "studiorich-calligraphy",
+      "studiorich-fat",
+      "studiorich-precision",
+      "studiorich-stock",
+    ]);
   });
 });
 
@@ -605,6 +613,127 @@ describe("LIVE STROKE STABILITY V2 -- a substantially longer, direction-changing
       expect(current.length).toBeGreaterThanOrEqual(previous.length);
       expect(current.slice(0, previous.length)).toEqual(previous);
       previous = current;
+    }
+  });
+});
+
+describe("SPRAY INSTRUMENT EXPRESSION PASS -- new caps (Precision, Calligraphy)", () => {
+  const points = [{ x: 100, y: 100, tMs: 0 }, { x: 140, y: 110, tMs: 60 }, { x: 180, y: 140, tMs: 120 }];
+
+  it("Precision cap stays thin regardless of motion -- its core width barely moves even for a wildly varying densityFactor", () => {
+    const slow = [{ x: 0, y: 0, tMs: 0 }, { x: 2, y: 0, tMs: 400 }, { x: 4, y: 0, tMs: 800 }]; // heavy dwell
+    const fast = [{ x: 0, y: 0, tMs: 0 }, { x: 200, y: 0, tMs: 5 }, { x: 400, y: 0, tMs: 10 }]; // extreme speed
+    const slowCore = resolveSprayCorePlan(slow, 10, hashSeed("precision-motion"), STUDIORICH_PRECISION_CAP)[0].width;
+    const fastCore = resolveSprayCorePlan(fast, 10, hashSeed("precision-motion"), STUDIORICH_PRECISION_CAP)[0].width;
+    expect(Math.abs(slowCore - fastCore) / slowCore).toBeLessThan(STUDIORICH_PRECISION_CAP.motionFootprintRange * 2 + 0.3);
+  });
+
+  it("a decelerating release spawns extra bonus particles for a flare-responsive cap (Fat), and none for Precision (flareResponse: 0)", () => {
+    // A large baseRadius keeps each authored segment under this gesture's own
+    // maxStep (no interior subdivision), so the LAST three emissions are
+    // exactly this gesture's own tail points -- isolating the deceleration
+    // (80 units/step, then 10 units/step) cleanly for `tailFlareFactor`.
+    const decelerating = [{ x: 0, y: 0 }, { x: 100, y: 0 }, { x: 180, y: 0 }, { x: 190, y: 0 }];
+    const fatWithFlare = resolveSprayParticlePlan(decelerating, 300, hashSeed("flare-compare"), STUDIORICH_FAT_CAP);
+    const fatNoFlare = resolveSprayParticlePlan(decelerating, 300, hashSeed("flare-compare"), { ...STUDIORICH_FAT_CAP, flareResponse: 0 });
+    expect(fatWithFlare.length).toBeGreaterThan(fatNoFlare.length);
+
+    // Precision already has flareResponse: 0 -- giving it a nonzero value
+    // (as a one-off test double) must be what actually produces the burst;
+    // Precision's own real profile produces none of it.
+    const precisionAsIs = resolveSprayParticlePlan(decelerating, 300, hashSeed("flare-compare"), STUDIORICH_PRECISION_CAP);
+    const precisionIfFlareResponsive = resolveSprayParticlePlan(decelerating, 300, hashSeed("flare-compare"), { ...STUDIORICH_PRECISION_CAP, flareResponse: 1 });
+    expect(precisionIfFlareResponsive.length).toBeGreaterThan(precisionAsIs.length);
+  });
+
+  it("Calligraphy cap's core width differs for strokes dragged in different directions relative to its nib axis", () => {
+    const alongNib = [{ x: 0, y: 0 }, { x: 100, y: 100 }]; // ~45deg, matches default nibAngleDeg
+    const acrossNib = [{ x: 0, y: 0 }, { x: 100, y: -100 }]; // ~-45deg, perpendicular to the nib
+    const alongWidth = resolveSprayCorePlan(alongNib, 15, hashSeed("calligraphy-dir"), STUDIORICH_CALLIGRAPHY_CAP)[0].width;
+    const acrossWidth = resolveSprayCorePlan(acrossNib, 15, hashSeed("calligraphy-dir"), STUDIORICH_CALLIGRAPHY_CAP)[0].width;
+    expect(acrossWidth).not.toBeCloseTo(alongWidth, 1);
+  });
+
+  it("directionalResponse: 0 caps (Stock/Fat/Precision) are completely unaffected by travel direction", () => {
+    const alongNib = [{ x: 0, y: 0 }, { x: 100, y: 100 }];
+    const acrossNib = [{ x: 0, y: 0 }, { x: 100, y: -100 }];
+    const alongWidth = resolveSprayCorePlan(alongNib, 15, hashSeed("stock-dir"), STUDIORICH_STOCK_CAP)[0].width;
+    const acrossWidth = resolveSprayCorePlan(acrossNib, 15, hashSeed("stock-dir"), STUDIORICH_STOCK_CAP)[0].width;
+    expect(acrossWidth).toBeCloseTo(alongWidth, 5);
+  });
+
+  it("resolveSprayCapProfile resolves both new caps by id", () => {
+    expect(resolveSprayCapProfile(STUDIORICH_PRECISION_CAP.id).id).toBe(STUDIORICH_PRECISION_CAP.id);
+    expect(resolveSprayCapProfile(STUDIORICH_CALLIGRAPHY_CAP.id).id).toBe(STUDIORICH_CALLIGRAPHY_CAP.id);
+  });
+
+  it("every cap produces a finite, non-pathological plan for an ordinary gesture -- no NaN/Infinity for any cap in the registry", () => {
+    for (const cap of Object.values(SPRAY_CAP_PROFILES)) {
+      const plan = resolveSprayParticlePlan(points, 18, hashSeed("every-cap-" + cap.id), cap);
+      for (const particle of plan) {
+        expect(Number.isFinite(particle.x)).toBe(true);
+        expect(Number.isFinite(particle.y)).toBe(true);
+        expect(Number.isFinite(particle.radius)).toBe(true);
+        expect(particle.radius).toBeGreaterThan(0);
+        expect(Number.isFinite(particle.alpha)).toBe(true);
+        expect(particle.alpha).toBeGreaterThanOrEqual(0);
+        expect(particle.alpha).toBeLessThanOrEqual(1);
+      }
+      const core = resolveSprayCorePlan(points, 18, hashSeed("every-cap-core-" + cap.id), cap);
+      for (const pass of core) {
+        expect(Number.isFinite(pass.width)).toBe(true);
+        expect(pass.width).toBeGreaterThan(0);
+        expect(Number.isFinite(pass.alpha)).toBe(true);
+      }
+    }
+  });
+});
+
+describe("SPRAY INSTRUMENT EXPRESSION PASS -- resolveSpraySoundState (derivable, no playback required)", () => {
+  const points = [{ x: 0, y: 0, tMs: 0 }, { x: 50, y: 10, tMs: 60 }, { x: 90, y: 40, tMs: 140 }];
+
+  it("is deterministic for identical inputs", () => {
+    const a = resolveSpraySoundState(points, 15, STUDIORICH_STOCK_CAP);
+    const b = resolveSpraySoundState(points, 15, STUDIORICH_STOCK_CAP);
+    expect(a).toEqual(b);
+  });
+
+  it("reports future spatial input as explicitly absent, never fabricated", () => {
+    const state = resolveSpraySoundState(points, 15, STUDIORICH_STOCK_CAP);
+    expect(state.spatial).toEqual({ available: false });
+  });
+
+  it("returns a safe neutral state for no points or a non-positive base radius", () => {
+    expect(resolveSpraySoundState([], 15)).toEqual({
+      aerosolIntensity: 0, sputterActive: false, sputterIntensity: 0,
+      rattleActive: false, rattleIntensity: 0, materialLoadNormalized: 0, spatial: { available: false },
+    });
+    expect(resolveSpraySoundState(points, 0)).toEqual({
+      aerosolIntensity: 0, sputterActive: false, sputterIntensity: 0,
+      rattleActive: false, rattleIntensity: 0, materialLoadNormalized: 0, spatial: { available: false },
+    });
+  });
+
+  it("a rapid whip/snap (sharp local reversal) activates rattle only for a flare-responsive cap, never merely because spray is active", () => {
+    const whip = [
+      { x: 0, y: 0, tMs: 0 }, { x: 150, y: 0, tMs: 10 }, { x: 160, y: 0, tMs: 30 }, { x: 160.5, y: 0, tMs: 300 },
+    ];
+    const smooth = [{ x: 0, y: 0, tMs: 0 }, { x: 40, y: 0, tMs: 100 }, { x: 80, y: 0, tMs: 200 }];
+    const fatWhip = resolveSpraySoundState(whip, 12, STUDIORICH_FAT_CAP);
+    const fatSmooth = resolveSpraySoundState(smooth, 12, STUDIORICH_FAT_CAP);
+    expect(fatWhip.rattleIntensity).toBeGreaterThan(fatSmooth.rattleIntensity);
+    const precisionWhip = resolveSpraySoundState(whip, 12, STUDIORICH_PRECISION_CAP);
+    expect(precisionWhip.rattleActive).toBe(false); // flareResponse: 0 -- never rattles
+  });
+
+  it("never produces NaN/Infinity for any cap, including an extreme/degenerate gesture", () => {
+    const degenerate = [{ x: 0, y: 0, tMs: 0 }, { x: 0, y: 0, tMs: 0 }];
+    for (const cap of Object.values(SPRAY_CAP_PROFILES)) {
+      const state = resolveSpraySoundState(degenerate, 10, cap);
+      expect(Number.isFinite(state.aerosolIntensity)).toBe(true);
+      expect(Number.isFinite(state.sputterIntensity)).toBe(true);
+      expect(Number.isFinite(state.rattleIntensity)).toBe(true);
+      expect(Number.isFinite(state.materialLoadNormalized)).toBe(true);
     }
   });
 });

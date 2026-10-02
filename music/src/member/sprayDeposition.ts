@@ -30,10 +30,34 @@
  * generation happens at render time, deterministically, from those points
  * plus the Mark's own stable id (used as the PRNG seed) and the active cap
  * profile (currently always the Stock Cap -- no per-Mark cap field yet).
+ *
+ * SPRAY INSTRUMENT EXPRESSION PASS -- input classification. Everything this
+ * engine (or `resolveSpraySoundState` below) reads falls into exactly one
+ * of three buckets; code in this module is commented against these names so
+ * a future spatial-input pass has an honest seam to extend rather than a
+ * pile of ad-hoc heuristics to reverse-engineer:
+ *
+ *   1. MEASURED  -- taken directly off a real input event, never computed:
+ *      `x`/`y` (every point), `tMs` (Spray only, elapsed ms since the
+ *      gesture's own first point), `pressure` (Spray only, raw
+ *      `PointerEvent.pressure`, used only once a real per-stroke VARIANCE
+ *      is confirmed -- see `hasMeaningfulPressureSignal`).
+ *   2. DERIVED   -- a bounded, deterministic function of MEASURED data from
+ *      THIS gesture alone, computed fresh every time, never persisted:
+ *      `densityFactor` (speed/dwell proxy), `flowFactor` (pressure->flow),
+ *      per-segment speed/acceleration (`motionFactorForSegment` below --
+ *      new this pass), local "instability" (direction-change rate, used for
+ *      sputter/dust character -- new this pass), and `dripDeposition.ts`'s
+ *      own local-load accumulation (reused, not re-derived here).
+ *   3. FUTURE SPATIAL (NOT IMPLEMENTED) -- can X/Y/Z, wall distance/depth,
+ *      pitch/yaw/roll, angular velocity/acceleration of the CAN (not of the
+ *      2D gesture). Today's pointer/Pencil input supplies none of this.
+ *      Nothing in this module fabricates a value for it; `resolveSpraySoundState`
+ *      explicitly reports it absent rather than inventing a placeholder.
  */
 
 
-import { SPRAY_DRIP_TUNING, resolveMaterialDripPlans, type DripPlan } from "./dripDeposition";
+import { SPRAY_DRIP_TUNING, resolveMaterialDripPlans, resolveDripOrigins, type DripPlan } from "./dripDeposition";
 
 export interface SprayPoint {
   readonly x: number;
@@ -98,6 +122,62 @@ export interface SprayCapProfile {
   readonly coreJitterRatio: number;
   /** Per-pass width variation, as a fraction of the pass's own nominal width (e.g. 0.25 = ±25%) -- deterministic, avoids every pass reading as identical stacked outlines. */
   readonly coreWidthJitterRatio: number;
+  /**
+   * SPRAY INSTRUMENT EXPRESSION PASS -- how far the core's own motion-driven
+   * width clamp can swing from 1 in either direction (replaces the previous
+   * hardcoded `clamp(meanDensity, 0.8, 1.2)`, i.e. a range of 0.2). A FAT
+   * cap gets a wide range (dramatic flare response to a slow/dwelled vs.
+   * fast/released gesture); a PRECISION cap gets a near-zero range (stays
+   * thin regardless of how the gesture moves -- "should NOT become a fat
+   * cap through gesture").
+   */
+  readonly motionFootprintRange: number;
+  /**
+   * How strongly a DECELERATING release at the gesture's own tail (derived,
+   * local, backward-looking only -- see `tailFlareFactor`) spawns extra,
+   * wider-flung particles there. 0 = no flare at all (Precision). A FAT cap
+   * is tuned to respond "much more dramatically" than a Skinny/Precision
+   * cap, per this pass's own cap-philosophy brief.
+   */
+  readonly flareResponse: number;
+  /**
+   * How strongly a FAST/dispersed emission spawns a few extra, faint,
+   * far-flung "dust" particles beyond the normal footprint -- the aerosol
+   * reading this pass's own brief asks for (DUST should "emerge...from
+   * aerosol/deposition behavior rather than...arbitrary brush stamps").
+   * 0 = no dust layer.
+   */
+  readonly dustResponse: number;
+  /**
+   * How strongly a DWELLED emission (high local load, short of the actual
+   * drip threshold in `dripDeposition.ts`) spawns a few extra, larger,
+   * denser "speckle" droplets mixed into the fine particle field -- the
+   * coarse-droplet layer distinct from ordinary aerosol grain. 0 = none.
+   */
+  readonly speckleResponse: number;
+  /**
+   * How strongly local direction-change "instability" (rapid, erratic
+   * travel-direction changes -- the nearest 2D proxy for a wet/unstable
+   * can) roughens particle radius/alpha variance -- the WET SPUTTER visual
+   * character. 0 = perfectly smooth aerosol regardless of how erratic the
+   * gesture is.
+   */
+  readonly instabilityResponse: number;
+  /**
+   * CALLIGRAPHY cap support -- how strongly this cap's CORE width responds
+   * to the gesture's own dominant travel direction relative to `nibAngleDeg`
+   * (a fixed chisel-nib axis). 0 for every non-directional cap (Stock, Fat,
+   * Precision) -- their core width never depends on travel direction at
+   * all, preserving their exact prior behavior. Computed once per gesture
+   * from that gesture's own average direction (never oscillated mid-stroke
+   * by this engine -- "technique... causes the variation", per this pass's
+   * own brief -- a different stroke drawn in a different direction reads
+   * thick/thin differently; the SAME stroke never auto-oscillates along its
+   * own length).
+   */
+  readonly directionalResponse: number;
+  /** The chisel nib's own fixed axis, in degrees (0 = pointing along +x). Only meaningful when `directionalResponse > 0`. */
+  readonly nibAngleDeg: number;
 }
 
 /**
@@ -183,6 +263,18 @@ export const STUDIORICH_STOCK_CAP: SprayCapProfile = Object.freeze({
   coreWidthRatio: 0.34,
   coreJitterRatio: 0.4,
   coreWidthJitterRatio: 0.5,
+  // SPRAY INSTRUMENT EXPRESSION PASS: 0.2 reproduces the prior hardcoded
+  // clamp(meanDensity, 0.8, 1.2) exactly -- zero behavior change for any
+  // existing Stock Cap Mark. Moderate flare/dust/speckle/instability so the
+  // general-purpose cap genuinely reads as an instrument, not a plain
+  // variable-width brush, without becoming either specialist cap.
+  motionFootprintRange: 0.2,
+  flareResponse: 0.5,
+  dustResponse: 0.4,
+  speckleResponse: 0.4,
+  instabilityResponse: 0.45,
+  directionalResponse: 0,
+  nibAngleDeg: 0,
 });
 
 /**
@@ -219,12 +311,102 @@ export const STUDIORICH_FAT_CAP: SprayCapProfile = Object.freeze({
   coreWidthRatio: 0.22,
   coreJitterRatio: 0.55,
   coreWidthJitterRatio: 0.6,
+  // SPRAY INSTRUMENT EXPRESSION PASS: a FAT cap is the one explicitly asked
+  // to "respond much more dramatically" to motion than a Skinny/Precision
+  // cap -- wide motion-footprint swing, strong flare/dust (a working bomber
+  // stroke genuinely dumps a dramatic flare on a fast release), and the
+  // most sputter-prone of the three non-directional caps (a wide-orifice
+  // cap is the one most prone to visible wet instability).
+  motionFootprintRange: 0.45,
+  flareResponse: 1,
+  dustResponse: 0.7,
+  speckleResponse: 0.6,
+  instabilityResponse: 0.65,
+  directionalResponse: 0,
+  nibAngleDeg: 0,
+});
+
+/**
+ * SPRAY INSTRUMENT EXPRESSION PASS -- SKINNY/PRECISION CAP. The opposite
+ * trade-off from Fat: a tight, confident, sustained hairline for detail
+ * work (hair/eyelashes/shines/fine linework per this pass's own cap-
+ * philosophy brief), narrow footprint, and -- per that brief's explicit
+ * "should NOT become a fat cap through gesture" constraint -- almost no
+ * motion-driven footprint swing and no flare/dust/speckle response at all.
+ * Fast movement on this cap simply deposits a thinner, lighter line (via
+ * the existing densityFactor/flowFactor particle-count response, unchanged
+ * and shared by every cap); it never widens into a different instrument.
+ */
+export const STUDIORICH_PRECISION_CAP: SprayCapProfile = Object.freeze({
+  id: "studiorich-precision",
+  name: "StudioRich Precision Cap",
+  footprintRadiusScale: 0.55,
+  baseParticlesPerEmission: 5,
+  maxParticlesPerEmission: 8,
+  maxEmissionPoints: 3000,
+  centerBias: 1.3,
+  edgeSoftness: 2.4,
+  baseParticleAlpha: 0.4,
+  particleRadiusRatio: 0.16,
+  particleMinRadiusRatio: 0.16,
+  corePasses: 3,
+  coreAlpha: 0.52,
+  coreWidthRatio: 0.3,
+  coreJitterRatio: 0.18,
+  coreWidthJitterRatio: 0.2,
+  motionFootprintRange: 0.06,
+  flareResponse: 0,
+  dustResponse: 0.1,
+  speckleResponse: 0,
+  instabilityResponse: 0.1,
+  directionalResponse: 0,
+  nibAngleDeg: 0,
+});
+
+/**
+ * SPRAY INSTRUMENT EXPRESSION PASS -- CALLIGRAPHY CAP. The one cap whose
+ * CORE width genuinely depends on the gesture's own dominant travel
+ * direction relative to a fixed chisel-nib axis (`nibAngleDeg`), via
+ * `resolveSprayCorePlan`'s own directional-width step below -- every other
+ * cap has `directionalResponse: 0` and is completely unaffected by that
+ * step. Deliberately NOT given a dramatic flare/dust response of its own
+ * (`flareResponse`/`dustResponse` modest) -- its own distinct working
+ * envelope is DIRECTION, not speed/release, per this pass's own brief
+ * ("should not automatically oscillate thick/thin; artist technique causes
+ * the variation" -- here, which direction the artist drags the can in).
+ */
+export const STUDIORICH_CALLIGRAPHY_CAP: SprayCapProfile = Object.freeze({
+  id: "studiorich-calligraphy",
+  name: "StudioRich Calligraphy Cap",
+  footprintRadiusScale: 1.1,
+  baseParticlesPerEmission: 7,
+  maxParticlesPerEmission: 12,
+  maxEmissionPoints: 3000,
+  centerBias: 1.1,
+  edgeSoftness: 2.1,
+  baseParticleAlpha: 0.32,
+  particleRadiusRatio: 0.18,
+  particleMinRadiusRatio: 0.22,
+  corePasses: 3,
+  coreAlpha: 0.46,
+  coreWidthRatio: 0.3,
+  coreJitterRatio: 0.3,
+  coreWidthJitterRatio: 0.3,
+  motionFootprintRange: 0.25,
+  flareResponse: 0.25,
+  dustResponse: 0.2,
+  speckleResponse: 0.15,
+  instabilityResponse: 0.2,
+  directionalResponse: 0.8,
+  nibAngleDeg: 45,
 });
 
 /** Data-driven cap registry -- a future StudioRich cap is a new profile object added here, never a new rendering branch. `DEFAULT_SPRAY_CAP_ID` resolves every legacy Spray Mark (authored before caps existed) to the Stock Cap, preserving its exact existing calibrated look. */
 export const SPRAY_CAP_PROFILES: Readonly<Record<string, SprayCapProfile>> = Object.freeze({
   [STUDIORICH_STOCK_CAP.id]: STUDIORICH_STOCK_CAP,
   [STUDIORICH_FAT_CAP.id]: STUDIORICH_FAT_CAP,
+  [STUDIORICH_PRECISION_CAP.id]: STUDIORICH_PRECISION_CAP,
+  [STUDIORICH_CALLIGRAPHY_CAP.id]: STUDIORICH_CALLIGRAPHY_CAP,
 });
 export const DEFAULT_SPRAY_CAP_ID = STUDIORICH_STOCK_CAP.id;
 
@@ -316,6 +498,96 @@ function pressureFlowFactor(pressure: number | undefined, signalPresent: boolean
 function pressureRadiusFactor(pressure: number | undefined, signalPresent: boolean): number {
   if (!signalPresent || pressure === undefined) return 1;
   return clamp(1 + (pressure - 0.5) * 0.12, 0.94, 1.06);
+}
+
+/**
+ * SPRAY INSTRUMENT EXPRESSION PASS -- DERIVED: local, backward-looking
+ * motion signal for the LAST few points of an emission list. Deliberately
+ * mirrors `densityFactorForSegment`'s own existing shape (bounded, local,
+ * tMs-gated with a legacy point-spacing fallback) but reports a RATIO of
+ * the final segment's own speed to the segment immediately before it --
+ * that ratio is what distinguishes "decelerating into a release" (ratio <
+ * 1, the tail is slowing down) from "still accelerating" or "constant
+ * speed" (ratio >= 1). Looking only at the LAST two segments (never the
+ * whole gesture, never a global max/mean) keeps this exactly as
+ * append/prefix-stable as every other derived signal in this module: a
+ * live-growing gesture's EARLIER emissions are never touched by this
+ * function, since it is only ever evaluated against the CURRENT final
+ * points, not retroactively against older ones.
+ */
+function tailFlareFactor(emissions: readonly SprayEmissionPoint[]): number {
+  if (emissions.length < 3) return 0;
+  const a = emissions[emissions.length - 3];
+  const b = emissions[emissions.length - 2];
+  const c = emissions[emissions.length - 1];
+  const speedAB = Math.hypot(b.x - a.x, b.y - a.y);
+  const speedBC = Math.hypot(c.x - b.x, c.y - b.y);
+  if (speedAB <= 1e-6) return 0;
+  const decelerationRatio = 1 - speedBC / speedAB; // >0 only when genuinely slowing down
+  return clamp(decelerationRatio, 0, 1);
+}
+
+/**
+ * SPRAY INSTRUMENT EXPRESSION PASS -- DERIVED: local "instability", the
+ * nearest honest 2D proxy for a wet/unstable can (real angular
+ * velocity/acceleration of the CAN itself is FUTURE SPATIAL input, not
+ * available here -- see this module's own classification doc). Computed
+ * purely from how sharply the travel DIRECTION changes between two
+ * consecutive short segments ENDING at this emission point -- a straight
+ * or gently-curving gesture scores near 0; a jittery, erratic one scores
+ * higher. Deliberately BACKWARD-LOOKING ONLY (never a "next" point) so an
+ * earlier emission's own instability can never change once a live,
+ * growing gesture appends more points after it -- the same append/prefix-
+ * stability shape as `tailFlareFactor` and every other derived signal in
+ * this module.
+ */
+function instabilityAt(emissions: readonly SprayEmissionPoint[], index: number): number {
+  if (index < 2) return 0;
+  const prev = emissions[index - 2];
+  const current = emissions[index - 1];
+  const next = emissions[index];
+  const v1x = current.x - prev.x;
+  const v1y = current.y - prev.y;
+  const v2x = next.x - current.x;
+  const v2y = next.y - current.y;
+  const len1 = Math.hypot(v1x, v1y);
+  const len2 = Math.hypot(v2x, v2y);
+  if (len1 <= 1e-6 || len2 <= 1e-6) return 0;
+  const cos = clamp((v1x * v2x + v1y * v2y) / (len1 * len2), -1, 1);
+  const angleChange = Math.acos(cos); // 0 = straight, PI = full reversal
+  return clamp(angleChange / Math.PI, 0, 1);
+}
+
+/**
+ * CALLIGRAPHY cap support -- the gesture's own dominant travel direction,
+ * as a single angle (radians), from first authored point to last. A
+ * whole-gesture average, deliberately NOT a per-segment value: computed
+ * once the gesture is otherwise complete (render time), so it never
+ * oscillates mid-stroke -- only a genuinely different stroke, dragged in a
+ * genuinely different direction, reads with a different core width. Falls
+ * back to 0 (no rotation) for a degenerate (near-stationary) gesture.
+ */
+function dominantTravelAngle(points: readonly SprayPoint[]): number {
+  if (points.length < 2) return 0;
+  const first = points[0];
+  const last = points[points.length - 1];
+  const dx = last.x - first.x;
+  const dy = last.y - first.y;
+  if (Math.hypot(dx, dy) <= 1e-6) return 0;
+  return Math.atan2(dy, dx);
+}
+
+/**
+ * CALLIGRAPHY cap support -- a chisel nib is widest when dragged PERPENDICULAR
+ * to its own edge and narrowest when dragged ALONG it, exactly like a real
+ * flat nib/felt-tip. `directionalResponse` of 0 returns exactly 1 (no
+ * change at all) for every non-directional cap.
+ */
+function directionalWidthFactor(travelAngleRad: number, cap: SprayCapProfile): number {
+  if (cap.directionalResponse <= 0) return 1;
+  const nibRad = (cap.nibAngleDeg * Math.PI) / 180;
+  const perpendicularness = Math.abs(Math.sin(travelAngleRad - nibRad)); // 1 = perpendicular (thick), 0 = aligned (thin)
+  return 1 + (perpendicularness - 0.5) * 2 * cap.directionalResponse;
 }
 
 /**
@@ -473,14 +745,21 @@ export function resolveSprayParticlePlan(
   const emissions = resolveSprayEmissionPoints(points, baseRadius, cap);
   const random = createSeededRandom(seed);
   const particles: SprayParticle[] = [];
-  for (const emission of emissions) {
+  const flare = cap.flareResponse > 0 ? tailFlareFactor(emissions) : 0;
+  for (let emissionIndex = 0; emissionIndex < emissions.length; emissionIndex += 1) {
+    const emission = emissions[emissionIndex];
+    // SPRAY INSTRUMENT EXPRESSION PASS -- WET SPUTTER character: local
+    // direction-change instability roughens this emission's own particle
+    // count/radius/alpha variance. 0 for an instabilityResponse: 0 cap (no
+    // behavior change at all).
+    const instability = cap.instabilityResponse > 0 ? instabilityAt(emissions, emissionIndex) * cap.instabilityResponse : 0;
     // BLACKBOOK Spray Physicality V1 -- Pressure: flow (density/volume)
     // scales particle COUNT here, folded in alongside the existing
     // velocity/spacing densityFactor -- both are bounded, both come from
     // already-authored, replayable data.
     const particleCount = Math.min(
       cap.maxParticlesPerEmission,
-      Math.max(1, Math.round(cap.baseParticlesPerEmission * emission.densityFactor * emission.flowFactor)),
+      Math.max(1, Math.round(cap.baseParticlesPerEmission * emission.densityFactor * emission.flowFactor * (1 + instability * 0.6))),
     );
     for (let index = 0; index < particleCount; index += 1) {
       const angle = random() * Math.PI * 2;
@@ -491,7 +770,7 @@ export function resolveSprayParticlePlan(
       const bandedRadius = cap.particleMinRadiusRatio + normalizedRadius * (1 - cap.particleMinRadiusRatio);
       const offsetRadius = bandedRadius * effectiveRadius;
       const edgeFalloff = (1 - normalizedRadius) ** cap.edgeSoftness;
-      const radiusJitter = PARTICLE_RADIUS_JITTER_FLOOR + random() * (1 - PARTICLE_RADIUS_JITTER_FLOOR);
+      const radiusJitter = (PARTICLE_RADIUS_JITTER_FLOOR + random() * (1 - PARTICLE_RADIUS_JITTER_FLOOR)) * (1 + (random() - 0.5) * instability);
       // BLACKBOOK Spray Physicality V1 -- Pressure's secondary, much
       // smaller (±6%) effect on particle radius (footprint), alongside its
       // primary flow/density effect above.
@@ -509,7 +788,66 @@ export function resolveSprayParticlePlan(
         // narrow Spray's overspray genuinely visible without meaningfully
         // changing the already-large broad-end particle sizes.
         radius: Math.max(1.1, effectiveRadius * cap.particleRadiusRatio * radiusJitter * pressureRadius),
-        alpha: cap.baseParticleAlpha * edgeFalloff * clamp(emission.densityFactor, 0.4, 1.4),
+        alpha: clamp(cap.baseParticleAlpha * edgeFalloff * clamp(emission.densityFactor, 0.4, 1.4) * (1 - instability * 0.25), 0, 1),
+      });
+    }
+
+    // SPRAY INSTRUMENT EXPRESSION PASS -- DUST: a few extra, faint,
+    // far-flung particles on genuinely FAST/dispersed emissions (low
+    // densityFactor), emerging from the same aerosol deposition model
+    // rather than a separate decorative stamp. 0 for dustResponse: 0.
+    if (cap.dustResponse > 0 && emission.densityFactor < 0.85) {
+      const dustStrength = (0.85 - emission.densityFactor) * cap.dustResponse;
+      const dustCount = Math.round(dustStrength * 6);
+      for (let d = 0; d < dustCount; d += 1) {
+        const angle = random() * Math.PI * 2;
+        const dustOffset = effectiveRadius * (1 + random() * 0.6); // beyond the normal footprint
+        particles.push({
+          x: emission.x + Math.cos(angle) * dustOffset,
+          y: emission.y + Math.sin(angle) * dustOffset,
+          radius: Math.max(0.6, effectiveRadius * cap.particleRadiusRatio * 0.45 * (0.6 + random() * 0.4)),
+          alpha: clamp(cap.baseParticleAlpha * 0.3 * dustStrength, 0, 1),
+        });
+      }
+    }
+
+    // SPRAY INSTRUMENT EXPRESSION PASS -- SPECKLE: a few extra, larger,
+    // denser coarse droplets on a DWELLED emission (high densityFactor,
+    // short of this material's own drip threshold) -- distinct from
+    // ordinary fine aerosol grain. 0 for speckleResponse: 0.
+    if (cap.speckleResponse > 0 && emission.densityFactor > 1.15) {
+      const speckleStrength = (emission.densityFactor - 1.15) * cap.speckleResponse;
+      const speckleCount = Math.round(speckleStrength * 4);
+      for (let s = 0; s < speckleCount; s += 1) {
+        const angle = random() * Math.PI * 2;
+        const speckleOffset = effectiveRadius * (cap.particleMinRadiusRatio + random() * (1 - cap.particleMinRadiusRatio) * 0.5);
+        particles.push({
+          x: emission.x + Math.cos(angle) * speckleOffset,
+          y: emission.y + Math.sin(angle) * speckleOffset,
+          radius: Math.max(1.4, effectiveRadius * cap.particleRadiusRatio * 1.7 * (0.8 + random() * 0.4)),
+          alpha: clamp(cap.baseParticleAlpha * 1.2, 0, 1),
+        });
+      }
+    }
+  }
+
+  // SPRAY INSTRUMENT EXPRESSION PASS -- FLARE: a decelerating RELEASE at
+  // the gesture's own tail spawns extra, wider-flung particles there, per
+  // this pass's own "speed, acceleration, release...can produce a
+  // convincing gesture-driven flare" brief. Bounded (never more than
+  // maxParticlesPerEmission extra), gated entirely by `flareResponse` so a
+  // Precision cap (flareResponse: 0) never flares regardless of release.
+  if (flare > 0) {
+    const lastEmission = emissions[emissions.length - 1];
+    const flareCount = Math.min(cap.maxParticlesPerEmission, Math.round(flare * cap.flareResponse * cap.maxParticlesPerEmission));
+    for (let index = 0; index < flareCount; index += 1) {
+      const angle = random() * Math.PI * 2;
+      const flareOffset = effectiveRadius * (1 + random() * 1.4 * flare * cap.flareResponse);
+      particles.push({
+        x: lastEmission.x + Math.cos(angle) * flareOffset,
+        y: lastEmission.y + Math.sin(angle) * flareOffset,
+        radius: Math.max(1, effectiveRadius * cap.particleRadiusRatio * (0.6 + random() * 0.6)),
+        alpha: clamp(cap.baseParticleAlpha * (0.5 + flare * 0.5), 0, 1),
       });
     }
   }
@@ -638,6 +976,19 @@ export function resolveSprayCorePlan(
   // layer's only job" doc above).
   const meanDensity = samples.reduce((sum, s) => sum + s.densityFactor, 0) / samples.length;
   const meanFlow = samples.reduce((sum, s) => sum + s.flowFactor, 0) / samples.length;
+  // SPRAY INSTRUMENT EXPRESSION PASS: replaces the previous hardcoded
+  // clamp(meanDensity, 0.8, 1.2) -- STOCK's own motionFootprintRange (0.2)
+  // reproduces that exact prior clamp, zero behavior change for any
+  // existing Mark. A FAT cap's wider range is what makes its core
+  // genuinely swell on a slow/dwelled pass and thin out on a fast
+  // release -- "Fat caps should respond much more dramatically than Skinny
+  // caps," per this pass's own cap-philosophy brief; a PRECISION cap's
+  // near-zero range is what keeps it thin "regardless of gesture."
+  const motionWidthFactor = clamp(meanDensity, 1 - cap.motionFootprintRange, 1 + cap.motionFootprintRange);
+  // CALLIGRAPHY cap support -- see `directionalWidthFactor`'s own doc.
+  // Exactly 1 (no change) for every cap with directionalResponse: 0.
+  const travelAngle = cap.directionalResponse > 0 ? dominantTravelAngle(points) : 0;
+  const directionalFactor = directionalWidthFactor(travelAngle, cap);
 
   const passesOut: SprayCorePass[] = [];
   for (let pass = 0; pass < passes; pass += 1) {
@@ -654,7 +1005,7 @@ export function resolveSprayCorePlan(
       : samples.map((p) => ({ x: p.x + jitterX, y: p.y + jitterY, densityFactor: p.densityFactor, flowFactor: p.flowFactor }));
     passesOut.push({
       points: jittered,
-      width: Math.max(0.6, nominalWidth * widthJitter * clamp(meanDensity, 0.8, 1.2)),
+      width: Math.max(0.6, nominalWidth * widthJitter * motionWidthFactor * directionalFactor),
       alpha: passAlphaBudget * (1 - passRatio * 0.3) * meanFlow,
     });
   }
@@ -685,4 +1036,86 @@ export function resolveSprayDripPlans(
   const effectiveRadius = baseRadius * cap.footprintRadiusScale;
   const emissions = resolveSprayEmissionPoints(points, baseRadius, cap);
   return resolveMaterialDripPlans(emissions, effectiveRadius, seed, SPRAY_DRIP_TUNING);
+}
+
+/**
+ * SPRAY INSTRUMENT EXPRESSION PASS -- "SOUND IS PART OF THE INSTRUMENT."
+ * No spatial spray audio exists in BLACKBOOK today (the only spray-sound
+ * code in this repository is `prototypes/spatial-spraypaint/src/
+ * SprayCanAudio.ts`, which `blackbook.html` explicitly does not import --
+ * see docs/architecture/blackbook/README.md§2). Building a full playback
+ * engine is explicitly out of this pass's bounded scope; what this function
+ * provides instead is the DERIVED sound-CHARACTER state a future playback
+ * layer would key off, computed from the exact same gesture/material
+ * signals driving the visual deposition above -- "visual deposition and
+ * audio should respond to the SAME gesture/material state where
+ * practical." Pure, deterministic, no `AudioContext`/no I/O -- fully
+ * testable without ever playing a sound.
+ *
+ * Deliberately keeps the three sound FAMILIES this pass's own brief
+ * requires staying distinct (never collapsed into one intensity scalar):
+ *   - aerosolIntensity -- 1: pressure/discharge, from flow/density.
+ *   - sputterActive    -- 2: wet/unstable delivery, from direction-change
+ *     instability + flow, NEVER metallic-rattle-coded.
+ *   - rattleActive     -- 3: mechanical mixing-ball rattle, gated on an
+ *     explicit whip/snap signal (rapid local deceleration/reversal) so it
+ *     has "visible justification in the resulting mark," never active
+ *     merely because spray is on.
+ * `spatial` (4: environmental response) is reported explicitly absent --
+ * no can distance/orientation exists yet; never fabricated.
+ */
+export interface SpraySoundState {
+  /** 1: aerosol/pressure discharge intensity, [0,1] -- from flow/density, the same signal driving particle count/alpha. */
+  readonly aerosolIntensity: number;
+  /** 2: wet sputter / unstable paint delivery -- true only once local direction-change instability crosses a real threshold for THIS cap. */
+  readonly sputterActive: boolean;
+  readonly sputterIntensity: number;
+  /** 3: mechanical mixing-ball rattle -- true only on a genuine rapid local deceleration/reversal (a "whip/snap"), never merely because spray is active. */
+  readonly rattleActive: boolean;
+  readonly rattleIntensity: number;
+  /** How much local material has accumulated (dwell), normalized against this cap's own drip threshold -- 1.0 means "at the drip threshold." */
+  readonly materialLoadNormalized: number;
+  /** 4: future spatial/environmental input -- always false/absent today; never fabricated. */
+  readonly spatial: { readonly available: false };
+}
+
+const SPUTTER_INSTABILITY_THRESHOLD = 0.35;
+const RATTLE_DECELERATION_THRESHOLD = 0.6;
+
+export function resolveSpraySoundState(
+  points: readonly SprayPoint[],
+  baseRadius: number,
+  cap: SprayCapProfile = STUDIORICH_STOCK_CAP,
+): SpraySoundState {
+  if (points.length === 0 || baseRadius <= 0) {
+    return { aerosolIntensity: 0, sputterActive: false, sputterIntensity: 0, rattleActive: false, rattleIntensity: 0, materialLoadNormalized: 0, spatial: { available: false } };
+  }
+  const effectiveRadius = baseRadius * cap.footprintRadiusScale;
+  const emissions = resolveSprayEmissionPoints(points, baseRadius, cap);
+  const meanDensity = emissions.reduce((sum, e) => sum + e.densityFactor, 0) / emissions.length;
+  const meanFlow = emissions.reduce((sum, e) => sum + e.flowFactor, 0) / emissions.length;
+  const aerosolIntensity = clamp((meanDensity * meanFlow) / MAX_DENSITY_FACTOR, 0, 1);
+
+  let maxInstability = 0;
+  for (let index = 0; index < emissions.length; index += 1) {
+    maxInstability = Math.max(maxInstability, instabilityAt(emissions, index));
+  }
+  const sputterIntensity = cap.instabilityResponse > 0 ? clamp((maxInstability - SPUTTER_INSTABILITY_THRESHOLD) / (1 - SPUTTER_INSTABILITY_THRESHOLD), 0, 1) : 0;
+
+  const flare = cap.flareResponse > 0 ? tailFlareFactor(emissions) : 0;
+  const rattleIntensity = flare > RATTLE_DECELERATION_THRESHOLD ? clamp((flare - RATTLE_DECELERATION_THRESHOLD) / (1 - RATTLE_DECELERATION_THRESHOLD), 0, 1) : 0;
+
+  const loads = resolveDripOrigins(emissions, effectiveRadius, SPRAY_DRIP_TUNING).map((o) => o.load);
+  const peakLoad = loads.length > 0 ? Math.max(...loads) : Math.max(0, meanDensity - 1);
+  const materialLoadNormalized = clamp(peakLoad / SPRAY_DRIP_TUNING.loadThreshold, 0, 2);
+
+  return {
+    aerosolIntensity,
+    sputterActive: sputterIntensity > 0,
+    sputterIntensity,
+    rattleActive: rattleIntensity > 0,
+    rattleIntensity,
+    materialLoadNormalized,
+    spatial: { available: false },
+  };
 }

@@ -3,23 +3,21 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>StudioRich Blackbook</title>
+    <title>StudioRich Blackbook — Spray Test</title>
     <style>
       /**
-       * BLACKBOOK EVENT UI POLISH V1 -- visual language adapted from
-       * prototypes/spatial-spraypaint/index.html's `.island`/`#bottom-bar`
-       * pattern (translucent/blurred rounded panels, LEFT identity / CENTER
-       * instrument / RIGHT workspace-document grid, minimal permanent
-       * chrome). Visual reference only -- no Spatial Spraypaint runtime
-       * code (HandTracker/PersonSegmenter/WetDripEngine/cap engine/camera)
-       * is imported or depended on here.
-       *
-       * WORKSPACE vs PAGE FRAME (preserved from Blackbook Default Page
-       * Format / 0924A): the canvas below fills the entire available view
-       * (the unbounded Cartesian WORKSPACE) -- the finite 16:9 PAGE is
-       * drawn INSIDE that canvas by blackbookRuntime.ts's own camera/render
-       * code, never by CSS aspect-ratio. Do not re-introduce a fixed-
-       * aspect-ratio canvas here.
+       * SPRAY INSTRUMENT EXPRESSION PASS -- development-only Spray Test /
+       * Calibration surface. Deliberately NOT a parallel drawing engine:
+       * this file is a copy of blackbook.html's own markup/CSS (same
+       * element ids, so blackbookRuntime.ts loads and runs completely
+       * unchanged -- it has no idea this isn't blackbook.html) with ONE
+       * addition, a purely decorative (`pointer-events: none`), non-
+       * persisted guide overlay listing the calibration gestures from this
+       * batch's own brief. No persistence/runtime code is duplicated or
+       * forked. Use the existing NEW ("+") control to start a dedicated
+       * page for testing, and DELETE it from the PAGES drawer afterward --
+       * this surface intentionally reuses Blackbook's real persistence,
+       * exactly like any other page.
        */
       * { box-sizing: border-box; margin: 0; padding: 0; }
       :root { color-scheme: dark; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #f4efe7; background: #050505; }
@@ -44,25 +42,6 @@
       select { border: 1px solid rgba(255,255,255,.16); border-radius: 6px; background: rgba(24,22,19,.92); color: #f4efe7; padding: 6px 8px; font: 700 10px/1 inherit; letter-spacing: .05em; }
       select:disabled { opacity: .4; }
 
-      /**
-       * BLACKBOOK Embedded PAGES Drawer V1 -- `#app` is now a flex row of
-       * TWO siblings: `#pages-drawer` (navigation) and `#workspace` (the
-       * canvas plus every existing piece of floating chrome, all of which
-       * were already `position: absolute` relative to their nearest
-       * positioned ancestor -- moving that ancestor role from `#app` to
-       * `#workspace` re-parents all of it with ZERO changes to any of
-       * their own existing position/top/left/right/bottom rules below.
-       * Opening/closing the drawer changes `#workspace`'s own flex-basis,
-       * which changes `canvas.clientWidth/Height` -- blackbookRuntime.ts's
-       * own `width()`/`height()` already read those live, and the existing
-       * `resizeCanvasesToDisplaySize()`/`render()` pair (already called on
-       * every native window resize) is called explicitly on drawer
-       * open/close too. This is a VIEWPORT change only: `cameraView`'s own
-       * pan/zoom state is untouched, so the same document-space Artwork
-       * simply gets remapped onto the new screen area, exactly like
-       * resizing the browser window already does -- no Artwork/Mark/
-       * PageFrame coordinate is ever touched by this.
-       */
       #app { display: flex; flex-direction: row; background: #050505; }
       #workspace { position: relative; flex: 1 1 auto; min-width: 0; height: 100%; }
       canvas#blackbook-page { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; display: block; }
@@ -73,7 +52,6 @@
         pointer-events: none;
       }
 
-      /* Floating island shell -- same restrained translucent/blurred panel Spatial Spraypaint uses for every grouped control cluster. */
       .island {
         border: 1px solid rgba(255,255,255,.12);
         border-radius: 14px;
@@ -82,7 +60,6 @@
         backdrop-filter: blur(16px);
       }
 
-      /* Bottom bar: LEFT identity -- CENTER instrument (Art Supplies) -- RIGHT workspace/document + future system menu. */
       #bottom-bar {
         position: absolute; z-index: 10; left: 16px; right: 16px; bottom: 16px;
         display: grid; grid-template-columns: minmax(0,1fr) auto minmax(0,1fr);
@@ -94,13 +71,11 @@
       #system-group { justify-self: end; flex-wrap: wrap; justify-content: flex-end; }
       #art-island, #supply-controls { flex-wrap: wrap; justify-content: center; }
 
-      /* Narrow viewport fallback -- the three-column bar stacks instead of overlapping once there isn't room for all three groups side by side. */
       @media (max-width: 900px) {
         #bottom-bar { grid-template-columns: 1fr; justify-items: center; row-gap: 8px; }
         #identity-group, #system-group { justify-self: center; }
       }
 
-      /* CONTEXTUAL MATERIAL CONTROLS -- which controls this island shows is decided entirely by blackbookRuntime.ts's `selectSupply`; this markup always contains all of them so no layout rebuild is needed when the active supply changes. */
       #supply-controls { display: flex; align-items: center; gap: 10px; padding: 8px 12px; }
       #supply-controls label { display: flex; align-items: center; gap: 6px; font-size: 10px; letter-spacing: .04em; color: #c8c0b6; }
       #supply-controls [hidden] { display: none !important; }
@@ -109,20 +84,6 @@
       #blackbook-cap-container button[aria-pressed="true"] { border-color: #e2572b; color: #e2572b; }
 
       #art-island { display: flex; align-items: center; gap: 6px; padding: 6px; }
-      /**
-       * ICON READINESS (BLACKBOOK EVENT UI POLISH V1, requirement 9) -- the
-       * real StudioRich Art Supply icon assets are not yet in this repo.
-       * Drop-in convention for later: an SVG at
-       *   music/public/icons/art-supplies/<supplyId>.svg   (viewBox 0 0 48 48)
-       * for <supplyId> in pencil|pen|marker|mop|spray|eraser, referenced
-       * here via a `--icon-<supplyId>` custom property on :root, e.g.
-       *   :root { --icon-pencil: url(/icons/art-supplies/pencil.svg); }
-       * `.tool-icon-glyph[data-icon]` below already reads that property by
-       * name -- adding the file + the one variable line is the entire
-       * integration; no button markup or layout change is needed. Until an
-       * icon exists the glyph renders at 0 size and the text label alone
-       * identifies the tool (no emoji, no placeholder art).
-       */
       .tool-icon { display: flex; flex-direction: column; align-items: center; gap: 3px; min-width: 46px; padding: 7px 6px; }
       .tool-icon-glyph { width: 16px; height: 16px; background-size: contain; background-repeat: no-repeat; background-position: center; }
       .tool-icon-glyph[data-icon="pencil"] { background-image: var(--icon-pencil, none); }
@@ -141,22 +102,6 @@
       #status-toast[data-visible="true"] { opacity: 1; }
       #status-toast[data-kind="error"] { color: #ff9a9a; }
 
-      /**
-       * BLACKBOOK Embedded PAGES Drawer V1 -- replaces the previous MY
-       * PAGES modal/overlay. This is a permanent LAYOUT primitive, not an
-       * overlay: `#pages-drawer` is a real flex sibling of `#workspace`
-       * (see `#app`'s own doc above), so opening it narrows the Workspace
-       * rather than covering it, and the Workspace stays fully interactive
-       * while it's open. Closed state is `width: 0` + `overflow: hidden`
-       * (no permanent large column) rather than `display: none`, so the
-       * width transition animates and layout never jumps. Cards are
-       * deliberately minimal (thumbnail + presentation-order number only,
-       * requirement 4) -- no timestamps/dimensions/mark-counts/IDs as
-       * primary UI; that data still exists on each Artwork, it's simply no
-       * longer surfaced here (development diagnostics remain available
-       * through existing mechanisms, e.g. Firestore/DevTools, not a new
-       * inspector).
-       */
       #pages-drawer {
         flex: 0 0 auto; width: 0; overflow: hidden;
         display: flex; flex-direction: column; align-items: stretch;
@@ -164,14 +109,6 @@
         transition: width 160ms ease;
       }
       #pages-drawer[data-open="true"] { width: 116px; }
-      /**
-       * PAGES DRAWER V1.1 -- a minimal header at the drawer's own top edge
-       * so the drawer can be collapsed from where it was opened, without
-       * crossing back to the far-side toolbar control (which still exists
-       * and still works -- this is an ADDITIONAL, drawer-local affordance,
-       * not a replacement). Deliberately a single compact row, never a
-       * large header.
-       */
       #pages-drawer-header {
         flex-shrink: 0; display: flex; align-items: center; justify-content: space-between;
         padding: 10px 10px 4px; font-size: 9px; letter-spacing: .1em; color: #928a80;
@@ -185,10 +122,6 @@
         flex: 1 1 auto; min-height: 0; overflow-y: auto;
         display: flex; flex-direction: column; align-items: center; gap: 14px;
         padding: 4px 0 16px;
-        /* PAGES DRAWER V1.1 -- thin, low-contrast scrollbar (Firefox) so it
-           doesn't visually dominate a 116px-wide column. WebKit's own
-           equivalent is the ::-webkit-scrollbar rules below -- CSS only,
-           no custom JS scrollbar. */
         scrollbar-width: thin;
         scrollbar-color: rgba(255,255,255,.18) transparent;
       }
@@ -198,15 +131,6 @@
       #pages-drawer-list:hover::-webkit-scrollbar-thumb,
       #pages-drawer-list:active::-webkit-scrollbar-thumb { background: rgba(255,255,255,.34); }
       #pages-drawer-empty { font-size: 9px; color: #928a80; text-align: center; padding: 0 10px; line-height: 1.5; }
-      /**
-       * BLACKBOOK Artwork DELETE V1 -- each card is now a small group
-       * (`.pages-drawer-item`, a plain `<div>`, never itself a `<button>`)
-       * containing TWO real, non-nested buttons: `.pages-drawer-item-open`
-       * (thumbnail + number, opens the Artwork) and
-       * `.pages-drawer-item-delete` (a small "×" restrained to the
-       * thumbnail's own corner, revealed on hover/focus so the narrow
-       * drawer isn't permanently cluttered with delete controls).
-       */
       .pages-drawer-item {
         display: flex; flex-direction: column; align-items: center; gap: 6px;
         width: 84px; padding: 4px; border-radius: 10px;
@@ -236,19 +160,6 @@
         font-size: 14px; font-weight: 700;
       }
 
-      /**
-       * β0.1 -- BLACKBOOK canonical RADIO receiver. Previously this
-       * control (top-left, independent of every bottom-bar group) was
-       * wired to eventMusicRuntime.ts (the separate eventProgram/current
-       * system), which is empty in production today ("Event music
-       * unavailable"). Replaced with the SAME canonical Channel receiver
-       * MAP already uses (radioChannelReceiverRuntime.ts's
-       * window.SBE.RadioChannelReceiver) -- one shared broadcast, two
-       * receivers, never a second RADIO implementation.
-       * eventMusicRuntime.ts itself is untouched and unrelated (separate
-       * documented system, out of this batch's scope) -- only this one
-       * script reference changed.
-       */
       #event-music {
         position: absolute; z-index: 9; top: 16px; left: 130px;
         display: flex; align-items: center; gap: 10px;
@@ -265,40 +176,43 @@
       #event-music-title { font-size: 10px; letter-spacing: .03em; color: #f4efe7; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
       #event-music-artist { font-size: 9px; letter-spacing: .03em; color: #928a80; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-      /**
-       * MAP / Blackbook / RADIO Integration Beta -- the Blackbook -> MAP
-       * half of the required bidirectional link (wall/'s own
-       * subwayBlackbookNavLink.js carries the MAP -> Blackbook half). A
-       * plain same-tab link for the same "one authoritative player" reason
-       * documented there.
-       *
-       * β0.1 PRODUCT CONVERGENCE: no more hardcoded localhost dev port.
-       * `blackbook.html` and `wall-app/` are always siblings at the site
-       * root (music/vite.config.ts's copy-wall-app-public plugin copies
-       * wall/ to dist/wall-app/, alongside dist/blackbook.html; the dev
-       * proxy mirrors this at /blackbook.html + /wall-app/ on the same
-       * MUSIC origin) -- a plain relative "wall-app/" href resolves
-       * correctly on any host/port without JS. Landing on bare wall-app/
-       * (no query params) now opens the SUBWAY-default β0.1 experience.
-       */
       #map-nav-link {
         position: fixed; z-index: 10000; top: 16px; right: 16px;
         padding: 8px 14px; font-size: 11px; font-weight: 700; letter-spacing: .07em;
         text-decoration: none; color: #f4efe7;
       }
+
+      /**
+       * SPRAY INSTRUMENT EXPRESSION PASS -- the one addition over
+       * blackbook.html: a purely decorative calibration-guide overlay.
+       * `pointer-events: none` on the outer layer means every pointer
+       * event still reaches the canvas underneath exactly as on the real
+       * Blackbook page -- this never intercepts a gesture, never stores
+       * anything, and is not rendered into any Artwork/thumbnail.
+       */
+      #spray-test-guide {
+        position: absolute; inset: 0; z-index: 2; pointer-events: none;
+        display: grid; grid-template-columns: repeat(4, 1fr); grid-template-rows: repeat(3, 1fr) auto;
+        gap: 6px; padding: 54px 18px 108px;
+      }
+      .spray-test-zone {
+        border: 1px dashed rgba(255,255,255,.14); border-radius: 8px;
+        display: flex; align-items: flex-start; padding: 6px 8px;
+      }
+      .spray-test-zone span {
+        font-size: 9px; font-weight: 700; letter-spacing: .05em; color: rgba(255,255,255,.4);
+        text-shadow: 0 1px 2px rgba(0,0,0,.6);
+      }
+      #spray-test-tag-zone {
+        grid-column: 1 / -1; border: 1px dashed rgba(255, 78, 132, 0.3); border-radius: 10px;
+        display: flex; align-items: flex-start; padding: 8px 10px;
+      }
+      #spray-test-tag-zone span { font-size: 10px; font-weight: 700; letter-spacing: .08em; color: rgba(255, 78, 132, 0.55); }
     </style>
   </head>
   <body>
     <div id="app">
-      <!-- BLACKBOOK Embedded PAGES Drawer V1 -- a real layout sibling of
-           #workspace, not an overlay. See this file's own CSS doc above
-           for exactly how opening/closing this reflows the Workspace
-           without ever touching Artwork/world coordinates. -->
       <nav id="pages-drawer" data-open="false" aria-label="Pages">
-        <!-- PAGES DRAWER V1.1 -- a drawer-local collapse control, so
-             closing it doesn't require crossing to the far-side toolbar
-             button. The toolbar's own PAGES toggle is unchanged/still
-             present. -->
         <div id="pages-drawer-header">
           <span>PAGES</span>
           <button id="pages-drawer-collapse" type="button" aria-label="Collapse Pages">‹</button>
@@ -307,7 +221,7 @@
         <button id="pages-drawer-new" type="button" aria-label="New page">+</button>
       </nav>
       <div id="workspace">
-        <span id="brand-mark">STUDIORICH BLACKBOOK</span>
+        <span id="brand-mark">SPRAY TEST / CALIBRATION</span>
         <a id="map-nav-link" class="island" href="wall-app/" aria-label="Back to MAP">MAP</a>
         <div id="event-music" class="island" aria-label="RADIO">
           <span id="event-music-live" data-live="false"><span id="event-music-live-dot"></span>LIVE RADIO</span>
@@ -319,6 +233,27 @@
           </div>
         </div>
         <canvas id="blackbook-page" aria-label="Blackbook drawing workspace"></canvas>
+
+        <!-- SPRAY INSTRUMENT EXPRESSION PASS -- the calibration guide
+             itself: one labeled dashed zone per named gesture from this
+             batch's own brief, plus a large unrestricted TAG zone. Purely
+             visual/non-interactive; see this file's own CSS doc above. -->
+        <div id="spray-test-guide" aria-hidden="true">
+          <div class="spray-test-zone"><span>01 CLEAN LINE</span></div>
+          <div class="spray-test-zone"><span>02 SUSTAINED THIN LINE (Precision cap)</span></div>
+          <div class="spray-test-zone"><span>03 THIN RELEASE / TAIL (ease off at the end)</span></div>
+          <div class="spray-test-zone"><span>04 FAT LINE (Fat cap)</span></div>
+          <div class="spray-test-zone"><span>05 FLARE (Fat cap, fast drag then stop)</span></div>
+          <div class="spray-test-zone"><span>06 FADE (lift pressure/speed gradually)</span></div>
+          <div class="spray-test-zone"><span>07 DUST (fast, light pass)</span></div>
+          <div class="spray-test-zone"><span>08 SPECKLE (slow dwelled pass)</span></div>
+          <div class="spray-test-zone"><span>09 DOT / DWELL (hold still, tap)</span></div>
+          <div class="spray-test-zone"><span>10 WET SPUTTER (erratic jittery drag)</span></div>
+          <div class="spray-test-zone"><span>11 BUILDUP → DRIP (slow, tight dwell)</span></div>
+          <div class="spray-test-zone"><span>12 CALLIGRAPHIC STROKE (Calligraphy cap)</span></div>
+          <div id="spray-test-tag-zone"><span>13 WHIP / SNAP — then: TAG AREA. One unrestricted tag below, any cap, any technique.</span></div>
+        </div>
+
         <small id="status-toast" class="island" aria-live="polite"></small>
 
         <div id="bottom-bar">
@@ -335,18 +270,9 @@
               <label id="blackbook-color-container">COLOR <input id="blackbook-color" type="color"></label>
               <label id="blackbook-width-container">WIDTH <input id="blackbook-width" type="range" min="1" max="48" step="1" value="5"></label>
               <label id="blackbook-opacity-container">OPACITY <input id="blackbook-opacity" type="range" min="0.15" max="1" step="0.05" value="0.82"></label>
-              <!-- BLACKBOOK Spray Physicality V1 -- TEMPORARY minimal cap
-                   selector, Spray-only. See blackbookRuntime.ts's own doc:
-                   the smallest coherent control this batch's own instruction
-                   allows, not a tool-palette redesign. -->
               <span id="blackbook-cap-container">CAP
                 <button id="blackbook-cap-stock" type="button" aria-pressed="true">SKINNY</button>
                 <button id="blackbook-cap-fat" type="button" aria-pressed="false">FAT</button>
-                <!-- SPRAY INSTRUMENT EXPRESSION PASS -- the smallest
-                     representative additional cap set this pass's own
-                     brief allows: a Precision (tight, non-flaring) cap and
-                     a Calligraphy (directional) cap, reusing the same
-                     minimal selector pattern as SKINNY/FAT above. -->
                 <button id="blackbook-cap-precision" type="button" aria-pressed="false">PRECISION</button>
                 <button id="blackbook-cap-calligraphy" type="button" aria-pressed="false">CALLIGRAPHY</button>
               </span>
@@ -365,19 +291,9 @@
             <button id="blackbook-fit" class="island">FIT</button>
             <button id="blackbook-pan" class="island" aria-pressed="false">PAN</button>
             <button id="blackbook-undo" class="island" disabled>UNDO</button>
-            <!-- BLACKBOOK CLEAR + Single-Step Undo V1 -- clears the CURRENT
-                 Artwork's Marks in place (no confirmation -- UNDO is the
-                 safety mechanism). Distinct from NEW, which starts a
-                 separate Artwork/page. -->
             <button id="blackbook-clear" class="island" disabled>CLEAR</button>
             <button id="blackbook-new" class="island">NEW</button>
-            <!-- BLACKBOOK Embedded PAGES Drawer V1 -- the compact, always-
-                 discoverable toggle for #pages-drawer (replaces the
-                 previous MY PAGES modal trigger; same button, new
-                 behavior -- opening/closing a layout drawer rather than a
-                 modal overlay). -->
             <button id="blackbook-pages-toggle" class="island" aria-pressed="false" aria-controls="pages-drawer">PAGES</button>
-            <!-- Future system-menu home (About StudioRich / Feedback / Help / Version) -- not built in this pass, but reserved here so it never has to compete with drawing space later. -->
             <button id="blackbook-menu" class="island" disabled>…</button>
           </div>
         </div>
