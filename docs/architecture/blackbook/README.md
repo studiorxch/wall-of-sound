@@ -507,7 +507,11 @@ re-simulated.
 
 **Deterministic identity/seeding**: `blackbookRuntime.ts`'s
 `activeOperation()` pre-assigns Mop/Spray's own real persisted Mark id
-(`crypto.randomUUID()`, written into `BlackbookStroke.markId` directly,
+(`mapArtworkBridge.ts`'s `createStableMarkId()` — prefers `crypto.randomUUID()`
+wherever available, falling back to an RFC 4122 v4 UUID built from
+`crypto.getRandomValues()` on a non-secure-context origin where
+`randomUUID` itself is unavailable; see SECURE-CONTEXT-INDEPENDENT MARK ID
+V1 below — written into `BlackbookStroke.markId` directly,
 rather than left to the generic persistence bridge's own fallback
 `createMarkId()`) the instant the operation object is created — before a
 single point of drip geometry is generated. That id, hashed
@@ -516,6 +520,28 @@ single point of drip geometry is generated. That id, hashed
 Firestore is ever needed to know a drip's own seed, and the same authored
 points + the same origin Mark id always regenerate (at generation time) —
 and, once persisted, always replay — byte-identical geometry.
+
+**SECURE-CONTEXT-INDEPENDENT MARK ID V1** (fix, established this batch):
+real-device recon (an iPad reaching a dev session over a LAN IP — plain
+HTTP, not `localhost`/HTTPS, i.e. not a secure context) found Mop and
+Spray silently producing no Mark at all: `crypto.randomUUID()` is
+secure-context-gated and `undefined` in that context, and both of
+`blackbookRuntime.ts`'s own Mop/Spray Mark-id call sites (`activeOperation()`'s
+pre-assignment above, and `createDripOperationsFor`'s own derivative drip
+Mark id) called it unconditionally — throwing before the Mark was ever
+pushed to `operations`, on both the live-preview (`render()`) and commit
+(`pointerup`) paths. `mapArtworkBridge.ts`'s `createStableMarkId()` is the
+one shared fix: prefers `crypto.randomUUID()` wherever it's actually
+available (identical ids/format, zero behavior change in every
+already-working environment), falling back to an equivalent RFC 4122 v4
+UUID built from `crypto.getRandomValues()` (which carries no secure-context
+restriction) only when `randomUUID` itself is unavailable. All three
+Mark-id call sites in this codebase — Mop/Spray's own pre-assignment, the
+derivative drip Mark, and the generic persistence bridge's `createMarkId`
+fallback (which Pencil/Pen/Marker/Eraser rely on) — now go through this one
+helper. No pointer/pressure/timing/deposition/drip behavior changed; this
+is purely an id-generation robustness fix, not a new spatial-input or
+iPad-specific code path.
 
 **How Spray and Mop differ**: both route through the exact same
 `resolveMaterialDripPlans`/`simulateMaterialDrip` engine; only their own

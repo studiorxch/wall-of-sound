@@ -13,6 +13,29 @@ import { selectArtworkForMark } from "@studiorich/member-identity";
 export const SUBWAY_MAP_SURFACE_ID = "map:new-york";
 
 /**
+ * SECURE-CONTEXT-INDEPENDENT MARK ID V1 -- `crypto.randomUUID()` is
+ * secure-context-gated per spec: on a plain-HTTP, non-`localhost` origin
+ * (e.g. a LAN-IP dev session reached from another device for real-input
+ * calibration) `crypto.randomUUID` is `undefined`, and calling it throws.
+ * `crypto.getRandomValues()` carries no such restriction. This prefers the
+ * native `randomUUID()` wherever it's actually available (identical
+ * ids/format to today, zero behavior change there) and falls back to
+ * building an equivalent RFC 4122 v4 UUID from `getRandomValues()` only
+ * when `randomUUID` itself is missing -- the one shared helper every
+ * Mark-id call site in this codebase should use instead of calling
+ * `crypto.randomUUID()` directly.
+ */
+export function createStableMarkId(): string {
+  if (typeof crypto.randomUUID === "function") return crypto.randomUUID();
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  bytes[6] = (bytes[6] & 0x0f) | 0x40; // version 4
+  bytes[8] = (bytes[8] & 0x3f) | 0x80; // variant 10xx
+  const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
+/**
  * Map Art Supplies Integration V1: the SAME supply identities Blackbook
  * already proves (see blackbookArtworkBridge.ts's identical map), applied
  * to geographic Marks instead of local-2d ones. There is no MapPencil/
@@ -207,7 +230,7 @@ export function createArtworkPersistenceBridge<TStroke extends { artworkId?: str
   getAuthenticatedMemberId,
   surfaceId,
   toMark,
-  createMarkId = () => crypto.randomUUID(),
+  createMarkId = () => createStableMarkId(),
   onArtworkSaved,
   onArtworkRemoved,
   getCurrentArtworkTarget,

@@ -1,13 +1,62 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ArtworkRepository, MapArtwork } from "@studiorich/member-identity";
 import {
   createMapArtworkPersistenceBridge,
+  createStableMarkId,
   SUBWAY_MAP_SURFACE_ID,
   toGeographicErasureMark,
   toStrokeMark,
   type WallErasure,
   type WallStroke,
 } from "./mapArtworkBridge";
+
+/**
+ * SECURE-CONTEXT-INDEPENDENT MARK ID V1 -- recon (real iPad calibration
+ * session, a plain-HTTP LAN-IP origin, not a secure context) found Mop and
+ * Spray silently producing no Mark at all: `crypto.randomUUID()` is
+ * secure-context-gated and `undefined` there, and both of blackbookRuntime.ts's
+ * own Mop/Spray Mark-id call sites (the live-preview/commit path and the
+ * derivative drip Mark) called it unconditionally, throwing before the
+ * Mark was ever pushed. `createStableMarkId` is the one shared fix -- these
+ * tests prove it directly, independent of any DOM/canvas/pointer plumbing.
+ */
+describe("createStableMarkId", () => {
+  const originalRandomUUID = crypto.randomUUID;
+
+  afterEach(() => {
+    crypto.randomUUID = originalRandomUUID;
+  });
+
+  it("prefers the native crypto.randomUUID() whenever it's available -- identical ids/format wherever it already works today", () => {
+    const spy = vi.fn(() => "11111111-1111-4111-8111-111111111111" as const);
+    crypto.randomUUID = spy;
+    expect(createStableMarkId()).toBe("11111111-1111-4111-8111-111111111111");
+    expect(spy).toHaveBeenCalledTimes(1);
+  });
+
+  it("falls back to crypto.getRandomValues() when randomUUID is unavailable -- the exact insecure-context (plain-HTTP, non-localhost) condition that broke Mop/Spray", () => {
+    // @ts-expect-error -- simulating an insecure context, where the spec
+    // itself leaves `crypto.randomUUID` undefined (never a real browser
+    // assigning `null`/throwing -- undefined is the actual shape).
+    crypto.randomUUID = undefined;
+    expect(() => createStableMarkId()).not.toThrow();
+    expect(typeof createStableMarkId()).toBe("string");
+  });
+
+  it("the fallback produces a well-formed RFC 4122 UUID v4 (correct version/variant nibbles)", () => {
+    // @ts-expect-error -- see above.
+    crypto.randomUUID = undefined;
+    const id = createStableMarkId();
+    expect(id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+  });
+
+  it("repeated fallback calls produce distinct ids -- never a fixed/degenerate value", () => {
+    // @ts-expect-error -- see above.
+    crypto.randomUUID = undefined;
+    const ids = new Set(Array.from({ length: 50 }, () => createStableMarkId()));
+    expect(ids.size).toBe(50);
+  });
+});
 
 const points = [
   { longitude: -73.99, latitude: 40.72 },

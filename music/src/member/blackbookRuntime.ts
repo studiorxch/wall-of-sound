@@ -26,6 +26,7 @@ import {
   type BlackbookOperation,
 } from "./blackbookArtworkBridge";
 import { createCartesianCamera, type CartesianCamera, type DocRect } from "./cartesianWorkspaceCamera";
+import { createStableMarkId } from "./mapArtworkBridge";
 import { createHostAwareMemberIdentity } from "./hostAwareMemberIdentity";
 import { createCurrentArtworkSession } from "./currentArtworkSession";
 import { numberArtworksForPagesDrawer, pickReplacementArtworkId } from "./artworkGallery";
@@ -543,7 +544,7 @@ function activeOperation(points: readonly CapturedPoint[]): BlackbookOperation {
     // a drip must reference -- and use it as a stable deterministic seed --
     // without waiting on an async persist round-trip. Every other supply is
     // unaffected (no drip seam exists for it).
-    ...(activeSupply === "mop" || activeSupply === "spray" ? { markId: crypto.randomUUID() } : {}),
+    ...(activeSupply === "mop" || activeSupply === "spray" ? { markId: createStableMarkId() } : {}),
     style: { color: colorControl.value, width: Number(widthControl.value), opacity: Number(opacityControl.value) },
     // Graphite Grades Foundation V1: only Pencil carries a grade; every
     // other supply is unaffected.
@@ -584,7 +585,7 @@ function createDripOperationsFor(operation: BlackbookOperation): BlackbookDrip[]
   return plans.map((plan) => ({
     operation: "material-drip" as const,
     id: `blackbook-drip-${nextOperationId++}`,
-    markId: crypto.randomUUID(),
+    markId: createStableMarkId(),
     points: plan.points,
     originMarkId,
     targetMaterialId,
