@@ -481,6 +481,15 @@ function rebuildCommittedCacheIfNeeded(): void {
  * this batch, and bakes THAT canonical result into `committedLayers` --
  * see the `pointerup` handler for where the live preview is discarded and
  * replaced, in the same synchronous `render()` call, with zero gap.
+ *
+ * SPRAY LIVE PREVIEW PERFORMANCE V1 -- passes `"livePreview"` to
+ * `drawOperation` so Spray's own particle paint uses the cheaper flat-fill
+ * primitive (strokeSmoothing.ts's `fillSprayParticleFlat`) instead of a
+ * `createRadialGradient` per particle -- recon found this the dominant
+ * cost of Spray's own per-window paint, well above Mop's. Mop reads
+ * `renderMode` not at all (its own `drawOperation` branch never touches
+ * it), so this has zero effect on Mop. The deposition plan (particle
+ * count/position/alpha, core passes) is completely unaffected either way.
  */
 function advanceLivePreview(): void {
   if (activeSupply !== "mop" && activeSupply !== "spray") return;
@@ -489,7 +498,7 @@ function advanceLivePreview(): void {
   const windowPoints = activePoints.slice(windowStart);
   liveBakedPointCount = activePoints.length;
   if (windowPoints.length < 2) return;
-  drawOperation({ ...activeOperation(activePoints), points: windowPoints }, livePreviewLayers);
+  drawOperation({ ...activeOperation(activePoints), points: windowPoints }, livePreviewLayers, "livePreview");
 }
 
 /** The one shared supply->material mapping `drawOperation` and `render` both need -- never duplicated. Eraser targets graphite only. */
@@ -629,7 +638,18 @@ function path(context: CanvasRenderingContext2D, points: readonly { x: number; y
  * deterministic rendering math inside this function is completely
  * unaffected either way -- only WHICH canvas receives the result changes.
  */
-function drawOperation(operation: BlackbookOperation, layers: MaterialLayerSet = materialLayers): void {
+/**
+ * SPRAY LIVE PREVIEW PERFORMANCE V1 -- `renderMode` only ever changes
+ * Spray's own particle paint (`strokeSpray`'s `particleRendering` option,
+ * strokeSmoothing.ts) -- every other supply, and Spray's own deposition
+ * plan/core passes/cap resolution, are completely unaffected by it.
+ * `"canonical"` (the default) is what every existing call site already
+ * used before this batch -- the committed-cache bake (pointerup,
+ * rebuildCommittedCacheIfNeeded) and reload path never pass `"livePreview"`,
+ * so their output is byte-identical to before. Only `advanceLivePreview`'s
+ * own ephemeral window call opts into `"livePreview"`.
+ */
+function drawOperation(operation: BlackbookOperation, layers: MaterialLayerSet = materialLayers, renderMode: "canonical" | "livePreview" = "canonical"): void {
   const { points } = operation;
   if (points.length < 2) return;
   // BLACKBOOK Deterministic Drips β0.1 -- a drip renders on its OWN target
@@ -670,7 +690,9 @@ function drawOperation(operation: BlackbookOperation, layers: MaterialLayerSet =
     // instant it's rendered.
     const sprayPoints = points as readonly { readonly x: number; readonly y: number; readonly tMs?: number; readonly pressure?: number }[];
     const screenPoints = sprayPoints.map((point) => ({ ...docToScreen(point), tMs: point.tMs, pressure: point.pressure }));
-    strokeSpray(materialCtx, screenPoints, scaledStyle, operation.id, resolveSprayCapProfile(operation.capId));
+    strokeSpray(materialCtx, screenPoints, scaledStyle, operation.id, resolveSprayCapProfile(operation.capId), {
+      particleRendering: renderMode === "livePreview" ? "flat" : "gradient",
+    });
     materialCtx.restore();
     return;
   }

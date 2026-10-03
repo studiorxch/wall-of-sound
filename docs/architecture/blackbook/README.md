@@ -781,6 +781,26 @@ capture (`activePoints.push`, `getCoalescedEvents`) is completely
 unaffected — this only changes WHEN the already-captured points get
 painted, never how many are captured or what gets computed.
 
+**Problem 3 (SPRAY LIVE PREVIEW PERFORMANCE V1 — the one remaining
+material-specific bottleneck under Problem 2b's scheduler):** even with
+V1/V2a/V2b fixed, Apple Pencil retesting showed Spray's own live-preview
+window still visibly trailed the Pencil while every other tool (including
+Mop) kept up — Spray's per-particle fill used `createRadialGradient()` +
+3 `addColorStop()` calls, several times more expensive per particle than a
+flat fill. Fixed, Spray-only, inside the existing windowed live-preview
+mechanism from Problem 1 (no scheduling change): `drawOperation` takes a
+`renderMode: "canonical" | "livePreview"` parameter (default `"canonical"`,
+so every pre-existing call site — the committed-cache bake, reload — is
+unaffected); `advanceLivePreview`'s own windowed call is the only caller
+that passes `"livePreview"`, which `strokeSpray` (`strokeSmoothing.ts`)
+turns into `particleRendering: "flat"` — the exact same
+`resolveSprayParticlePlan` output (same positions, same count, same radius/
+alpha, same deposition plan), painted with a single flat `fill()` instead
+of a per-particle gradient. Like the PRNG-restart approximation above, this
+is a disclosed, transient, live-only cosmetic approximation: `pointerup`
+always bakes the canonical soft-gradient particle fill, unchanged. Mop and
+every other material never read `renderMode` and are unaffected.
+
 **Development-only diagnostics**: `window.__blackbookRenderDiagnostics`
 (gated on `import.meta.env.DEV`, never active in a production build, never
 a `console.log`) exposes `scheduleCalls`/`renderNowCalls`/`actualRenders`

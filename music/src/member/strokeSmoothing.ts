@@ -106,6 +106,37 @@ export function fillSprayParticle(
 }
 
 /**
+ * SPRAY LIVE PREVIEW PERFORMANCE V1 -- the exact same particle (same
+ * position/radius/alpha, from the exact same `resolveSprayParticlePlan`
+ * output `fillSprayParticle` reads), painted as a single flat-color
+ * `fill()` instead of constructing a `createRadialGradient` per particle.
+ * `createRadialGradient` + 3 `addColorStop` calls per particle is the
+ * single most expensive part of Spray's own live-preview paint cost (see
+ * this batch's own recon) -- this is a RENDERING simplification only,
+ * never a deposition change: no particle is added, removed, repositioned,
+ * or resized; `centerAlpha` is computed identically to `fillSprayParticle`.
+ * Used ONLY for the ephemeral, never-persisted live-preview window
+ * (`strokeSpray`'s own `particleRendering: "flat"` option, wired from
+ * `blackbookRuntime.ts`'s `advanceLivePreview`) -- the canonical
+ * committed-Mark render path (pointerup bake, reload) always uses
+ * `fillSprayParticle`'s soft gradient, unchanged.
+ */
+export function fillSprayParticleFlat(
+  ctx: CanvasRenderingContext2D,
+  particle: { readonly x: number; readonly y: number; readonly radius: number; readonly alpha: number },
+  color: string,
+  opacity: number,
+): void {
+  const centerAlpha = Math.min(1, Math.max(0, opacity * particle.alpha));
+  if (centerAlpha <= 0 || particle.radius <= 0) return;
+  if (!isFinite(particle.x) || !isFinite(particle.y) || !isFinite(particle.radius)) return;
+  ctx.fillStyle = withAlpha(color, centerAlpha);
+  ctx.beginPath();
+  ctx.arc(particle.x, particle.y, particle.radius, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+/**
  * Calibration V1 Revision 11: Mop's dabs used to reuse `fillSprayParticle`
  * wholesale -- its soft aerosol falloff (opaque center fading gradually to
  * zero well before the edge) is correct for Spray but made every Mop
@@ -660,16 +691,33 @@ export function strokeMaterialDrip(
   ctx.restore();
 }
 
+/**
+ * SPRAY LIVE PREVIEW PERFORMANCE V1 -- `particleRendering` ("gradient",
+ * the default) never changes anything about THIS function's canonical
+ * callers (pointerup's commit bake, reload) -- it exists solely so
+ * `blackbookRuntime.ts`'s ephemeral, never-persisted live-preview window
+ * can opt into `fillSprayParticleFlat`'s cheaper paint for that one,
+ * transient call site. Both options read the exact same
+ * `resolveSprayParticlePlan`/`resolveSprayCorePlan` output -- the
+ * deposition plan itself, and everything upstream of painting, is
+ * completely unaffected by this option.
+ */
+export interface StrokeSprayOptions {
+  readonly particleRendering?: "gradient" | "flat";
+}
+
 export function strokeSpray(
   ctx: CanvasRenderingContext2D,
   points: readonly SmoothablePoint[],
   style: { readonly color: string; readonly width: number; readonly opacity: number },
   seedSource: string,
   cap: SprayCapProfile = STUDIORICH_STOCK_CAP,
+  options?: StrokeSprayOptions,
 ): void {
   if (points.length < 2) return;
   const seed = hashSeed(seedSource);
   const baseRadius = style.width * 0.5;
+  const fillParticle = options?.particleRendering === "flat" ? fillSprayParticleFlat : fillSprayParticle;
 
   ctx.save();
   ctx.globalCompositeOperation = "source-over";
@@ -690,7 +738,7 @@ export function strokeSpray(
   ctx.save();
   ctx.globalCompositeOperation = "source-over";
   for (const particle of resolveSprayParticlePlan(points, baseRadius, seed, cap)) {
-    fillSprayParticle(ctx, particle, style.color, style.opacity);
+    fillParticle(ctx, particle, style.color, style.opacity);
   }
   ctx.restore();
 }

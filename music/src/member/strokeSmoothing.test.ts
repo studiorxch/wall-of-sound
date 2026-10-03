@@ -51,6 +51,8 @@ function fakeMopContext() {
   const alphas: number[] = [];
   const strokeStyles: string[] = [];
   const gradientStops: [number, string][] = [];
+  const fillStyles: unknown[] = [];
+  let createRadialGradientCallCount = 0;
   const ctx = {
     save: () => calls.push("save"),
     restore: () => calls.push("restore"),
@@ -60,21 +62,24 @@ function fakeMopContext() {
     moveTo: (x: number, y: number) => calls.push(`moveTo(${x},${y})`),
     lineTo: (x: number, y: number) => calls.push(`lineTo(${x},${y})`),
     arc: (x: number, y: number, r: number) => calls.push(`arc(${x},${y},${r})`),
-    createRadialGradient: () => ({
-      addColorStop: (offset: number, color: string) => gradientStops.push([offset, color]),
-    }),
+    createRadialGradient: () => {
+      createRadialGradientCallCount += 1;
+      calls.push("createRadialGradient");
+      return { addColorStop: (offset: number, color: string) => gradientStops.push([offset, color]) };
+    },
     get lineWidth() { return lineWidths[lineWidths.length - 1] ?? 0; },
     set lineWidth(value: number) { lineWidths.push(value); calls.push(`lineWidth=${value}`); },
     get globalAlpha() { return alphas[alphas.length - 1] ?? 0; },
     set globalAlpha(value: number) { alphas.push(value); calls.push(`globalAlpha=${value}`); },
     get strokeStyle() { return strokeStyles[strokeStyles.length - 1] ?? ""; },
     set strokeStyle(value: string) { strokeStyles.push(value); calls.push(`strokeStyle=${value}`); },
-    fillStyle: "" as unknown,
+    get fillStyle() { return fillStyles[fillStyles.length - 1] ?? ""; },
+    set fillStyle(value: unknown) { fillStyles.push(value); calls.push(`fillStyle=${typeof value === "string" ? value : "[gradient]"}`); },
     lineCap: "",
     lineJoin: "",
     globalCompositeOperation: "",
   };
-  return { ctx, calls, lineWidths, alphas, strokeStyles, gradientStops };
+  return { ctx, calls, lineWidths, alphas, strokeStyles, gradientStops, fillStyles, get createRadialGradientCallCount() { return createRadialGradientCallCount; } };
 }
 
 function fakeContext() {
@@ -807,6 +812,72 @@ describe("strokeSpray -- Spray Material Calibration V1", () => {
     expect(() => strokeSpray({} as never, [], legacyStyle, "legacy-mark")).not.toThrow();
     const { ctx } = fakeMopContext();
     expect(() => strokeSpray(ctx as never, points, legacyStyle, "legacy-mark")).not.toThrow();
+  });
+
+  /**
+   * SPRAY LIVE PREVIEW PERFORMANCE V1 -- `particleRendering` only ever
+   * changes the per-particle PAINT primitive; everything else (the
+   * deposition plan, core passes, cap resolution) is identical regardless
+   * of the option. These tests prove that directly, rather than merely
+   * asserting "it feels faster."
+   */
+  describe("particleRendering option -- SPRAY LIVE PREVIEW PERFORMANCE V1", () => {
+    it("defaults to the existing soft-gradient particle fill when no option is passed -- byte-identical to every call site before this batch", () => {
+      const withoutOption = fakeMopContext();
+      strokeSpray(withoutOption.ctx as never, points, style, "mark-a");
+      const explicitGradient2 = fakeMopContext();
+      strokeSpray(explicitGradient2.ctx as never, points, style, "mark-a", undefined, { particleRendering: "gradient" });
+      expect(withoutOption.calls).toEqual(explicitGradient2.calls);
+      expect(withoutOption.createRadialGradientCallCount).toBeGreaterThan(0);
+    });
+
+    it("'flat' mode never calls createRadialGradient -- the actual cost this option exists to remove", () => {
+      const flat = fakeMopContext();
+      strokeSpray(flat.ctx as never, points, style, "mark-a", undefined, { particleRendering: "flat" });
+      expect(flat.createRadialGradientCallCount).toBe(0);
+      // Every particle fillStyle assignment is a plain color string, never a gradient object.
+      const particleFillStyles = flat.fillStyles.filter((value) => typeof value === "string" && value.startsWith("rgba"));
+      expect(particleFillStyles.length).toBeGreaterThan(0);
+    });
+
+    it("'flat' and 'gradient' modes produce the exact same number of particle paint calls (arc+fill) -- same deposition plan, only the fill primitive differs", () => {
+      const gradient = fakeMopContext();
+      strokeSpray(gradient.ctx as never, points, style, "mark-a", undefined, { particleRendering: "gradient" });
+      const flat = fakeMopContext();
+      strokeSpray(flat.ctx as never, points, style, "mark-a", undefined, { particleRendering: "flat" });
+      const arcCount = (calls: readonly string[]) => calls.filter((call) => call.startsWith("arc(")).length;
+      const fillCount = (calls: readonly string[]) => calls.filter((call) => call === "fill").length;
+      expect(arcCount(flat.calls)).toBe(arcCount(gradient.calls));
+      expect(fillCount(flat.calls)).toBe(fillCount(gradient.calls));
+    });
+
+    it("'flat' and 'gradient' modes paint particles at the exact same positions, in the exact same order -- both consume the SAME resolveSprayParticlePlan output, never a second simulation", () => {
+      const gradient = fakeMopContext();
+      strokeSpray(gradient.ctx as never, points, style, "mark-a", undefined, { particleRendering: "gradient" });
+      const flat = fakeMopContext();
+      strokeSpray(flat.ctx as never, points, style, "mark-a", undefined, { particleRendering: "flat" });
+      const arcPositions = (calls: readonly string[]) => calls.filter((call) => call.startsWith("arc(")).map((call) => call.replace(/^arc\(/, ""));
+      expect(arcPositions(flat.calls)).toEqual(arcPositions(gradient.calls));
+    });
+
+    it("the core passes (stroke calls, cap profile, width/jitter) are completely unaffected by particleRendering", () => {
+      const gradient = fakeMopContext();
+      strokeSpray(gradient.ctx as never, points, style, "mark-a", undefined, { particleRendering: "gradient" });
+      const flat = fakeMopContext();
+      strokeSpray(flat.ctx as never, points, style, "mark-a", undefined, { particleRendering: "flat" });
+      const coreCalls = (c: typeof gradient) => c.calls.filter((call) => call === "stroke" || call.startsWith("moveTo(") || call.startsWith("lineTo(") || call.startsWith("lineWidth="));
+      expect(coreCalls(flat)).toEqual(coreCalls(gradient));
+    });
+
+    it("different caps (Stock/Fat/Precision/Calligraphy) still produce different deposition in 'flat' mode -- the option never collapses cap identity", () => {
+      const stock = fakeMopContext();
+      strokeSpray(stock.ctx as never, points, style, "mark-a", undefined, { particleRendering: "flat" });
+      const fat = fakeMopContext();
+      // Importing a different cap profile here would duplicate sprayDeposition.ts's own import surface for a single assertion -- width alone (already proven elsewhere to change footprint/particle count) is sufficient to prove 'flat' mode still respects whatever deposition plan it's given.
+      strokeSpray(fat.ctx as never, points, { ...style, width: 48 }, "mark-a", undefined, { particleRendering: "flat" });
+      const arcCount = (calls: readonly string[]) => calls.filter((call) => call.startsWith("arc(")).length;
+      expect(arcCount(fat.calls)).not.toBe(arcCount(stock.calls));
+    });
   });
 });
 
