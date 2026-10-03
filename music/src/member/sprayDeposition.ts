@@ -612,13 +612,42 @@ export function hashSeed(source: string): number {
  * `Math.random`.
  */
 export function createSeededRandom(seed: number): () => number {
-  let state = (seed || 1) >>> 0;
-  return () => {
-    state = (state + 0x6d2b79f5) >>> 0;
-    let value = state;
-    value = Math.imul(value ^ (value >>> 15), value | 1);
-    value ^= value + Math.imul(value ^ (value >>> 7), value | 61);
-    return ((value ^ (value >>> 14)) >>> 0) / 4294967296;
+  return createSeededRandomStream(seed).next;
+}
+
+/**
+ * SPRAY POINTER-UP RECONCILIATION V1 -- the same mulberry32-family
+ * generator as `createSeededRandom`, but exposing its own internal `state`
+ * so a caller can snapshot it after N draws and later resume the EXACT same
+ * sequence from a fresh call -- the one thing `createSeededRandom`'s plain
+ * closure-returning shape couldn't support. This is what lets
+ * `advanceSprayParticles`/`finalizeSprayParticles` (below) treat a live,
+ * incrementally-growing gesture's particle stream as ONE continuous PRNG
+ * sequence across many calls (one per animation frame) instead of each call
+ * restarting its own independent stream from `seed` -- recon found exactly
+ * that restart-per-window behavior was the source of the live-vs-canonical
+ * particle-count divergence (measured ~19.3% on a representative stroke).
+ * `resumeState` seeds the internal state directly (bypassing the `seed || 1`
+ * fallback `createSeededRandomStream(seed)` applies at genuine construction
+ * time) -- 0 is a perfectly valid resumed state, never a signal to fall
+ * back to anything.
+ */
+export interface SeededRandomStream {
+  readonly next: () => number;
+  readonly state: number;
+}
+
+export function createSeededRandomStream(seed: number, resumeState?: number): SeededRandomStream {
+  let state = resumeState !== undefined ? resumeState >>> 0 : (seed || 1) >>> 0;
+  return {
+    next: () => {
+      state = (state + 0x6d2b79f5) >>> 0;
+      let value = state;
+      value = Math.imul(value ^ (value >>> 15), value | 1);
+      value ^= value + Math.imul(value ^ (value >>> 7), value | 61);
+      return ((value ^ (value >>> 14)) >>> 0) / 4294967296;
+    },
+    get state() { return state; },
   };
 }
 
@@ -651,80 +680,119 @@ export function createSeededRandom(seed: number): () => number {
  * point is always included. Short/ordinary strokes are completely
  * unaffected (the adaptive step never goes below the nominal one).
  */
+/**
+ * SPRAY POINTER-UP RECONCILIATION V1 -- the per-segment body factored out
+ * of `resolveSprayEmissionPoints`'s own loop, unchanged, so
+ * `advanceSprayEmissionPoints` (below) can resume this SAME walk
+ * mid-gesture instead of duplicating it. Mutates `emissions` by pushing
+ * onto it (never reads past what it's given) -- the hard
+ * `cap.maxEmissionPoints` cutoff behavior (STOP, never re-select) is
+ * exactly LIVE STROKE STABILITY V2's existing append/prefix-stability
+ * guarantee, preserved byte-for-byte.
+ */
+function emitSprayEmissionSegment(
+  emissions: SprayEmissionPoint[],
+  start: SprayPoint,
+  end: SprayPoint,
+  effectiveRadius: number,
+  maxStep: number,
+  pressureSignal: boolean,
+  cap: SprayCapProfile,
+): "continue" | "stop" {
+  const density = densityFactorForSegment(start, end, effectiveRadius);
+  // Flow uses the SEGMENT's average pressure -- both endpoints, same
+  // "meaningful signal" gate as density's velocity check, deterministic
+  // from the two already-authored points.
+  const segmentPressure = start.pressure !== undefined && end.pressure !== undefined
+    ? (start.pressure + end.pressure) / 2
+    : start.pressure ?? end.pressure;
+  const flow = pressureFlowFactor(segmentPressure, pressureSignal);
+  const segmentLength = Math.hypot(end.x - start.x, end.y - start.y);
+  const steps = Math.max(1, Math.ceil(segmentLength / maxStep));
+  for (let step = 1; step <= steps; step += 1) {
+    if (emissions.length >= cap.maxEmissionPoints) return "stop";
+    const t = step / steps;
+    emissions.push({ x: start.x + (end.x - start.x) * t, y: start.y + (end.y - start.y) * t, densityFactor: density, flowFactor: flow });
+  }
+  return "continue";
+}
+
+/**
+ * LIVE STROKE STABILITY V2's own append/prefix-stability guarantee (see
+ * `emitSprayEmissionSegment`'s doc) is exactly what makes this a one-line
+ * delegation to `advanceSprayEmissionPoints(null, ...)` safe: a fresh,
+ * from-scratch cursor call is BY CONSTRUCTION byte-identical to this
+ * function's own former standalone body (same per-segment math, same
+ * single source of truth) -- never a second implementation that could
+ * silently drift from the incremental one.
+ */
 export function resolveSprayEmissionPoints(
   points: readonly SprayPoint[],
   baseRadius: number,
   cap: SprayCapProfile = STUDIORICH_STOCK_CAP,
 ): readonly SprayEmissionPoint[] {
-  if (points.length === 0 || baseRadius <= 0) return [];
-  // BLACKBOOK Spray Physicality V1 -- Cap Personality: the cap's own
-  // footprint scale is applied ONCE, here, so every downstream computation
-  // (step sizing, velocity-neutral calibration, and resolveSprayParticlePlan's
-  // own particle offsets/radii) consistently uses the cap's REAL physical
-  // footprint, not the artist's raw Width value.
+  return advanceSprayEmissionPoints(null, points, baseRadius, cap).emissions;
+}
+
+/**
+ * SPRAY POINTER-UP RECONCILIATION V1 -- resumable counterpart to
+ * `resolveSprayEmissionPoints`. `cursor` (`null` to start a gesture fresh)
+ * holds every emission already resolved plus how many of `points` have
+ * already been folded into them; this call appends ONLY the segments
+ * implied by points past that mark, using the exact same
+ * `emitSprayEmissionSegment` body `resolveSprayEmissionPoints` itself now
+ * delegates to -- so an incrementally-advanced cursor's final `emissions`
+ * are byte-identical to calling `resolveSprayEmissionPoints` once on the
+ * same final `points` (same per-segment math, same append/prefix-stable
+ * guarantee, same hard `maxEmissionPoints` cutoff). `pressureSignal` is
+ * re-evaluated from the CURRENT, growing `points` on every call (cheap --
+ * a single linear variance pass, never the expensive part) rather than
+ * frozen at the cursor's first call: this is a STRICT IMPROVEMENT over the
+ * live-preview's pre-existing per-window behavior (which evaluated it from
+ * only that window's own tiny slice), converging on the same whole-array
+ * value `resolveSprayEmissionPoints` computes once the gesture's `points`
+ * stop growing. The one disclosed, narrow edge case this doesn't chase: if
+ * a stroke's pressure VARIANCE crosses `hasMeaningfulPressureSignal`'s
+ * threshold mid-gesture (a real signal only becomes detectable partway
+ * through), segments emitted before that point keep the flow factor that
+ * was correct when they were resolved rather than retroactively adopting
+ * the later value a single whole-array call would apply uniformly -- a
+ * bounded, cosmetic divergence in the same disclosed category as this
+ * module's other live-preview approximations, not a regression from
+ * today's per-window behavior (which had the identical gap, only worse).
+ */
+export interface SprayEmissionCursor {
+  readonly emissions: readonly SprayEmissionPoint[];
+  readonly consumedPointCount: number;
+}
+
+export function advanceSprayEmissionPoints(
+  cursor: SprayEmissionCursor | null,
+  points: readonly SprayPoint[],
+  baseRadius: number,
+  cap: SprayCapProfile = STUDIORICH_STOCK_CAP,
+): SprayEmissionCursor {
+  if (points.length === 0 || baseRadius <= 0) return cursor ?? { emissions: [], consumedPointCount: 0 };
   const effectiveRadius = baseRadius * cap.footprintRadiusScale;
   const pressureSignal = hasMeaningfulPressureSignal(points);
-  // LIVE STROKE STABILITY V2 -- root cause of the REMAINING rearrangement
-  // (reported specifically at a direction change, on a long gesture):
-  // Revision 8's own safety nets -- pre-simplifying the RAW points via
-  // Douglas-Peucker once `points.length - 1 > budget`, and post-hoc
-  // simplifying the built `emissions` list once it exceeded
-  // `cap.maxEmissionPoints` -- are each a GLOBAL recompute over the WHOLE
-  // current array. `simplifyPathToBudget`'s bucket boundaries are a
-  // function of the CURRENT total point count, so the exact instant a
-  // live, still-growing gesture crossed either threshold, EVERY earlier
-  // segment's representative points could be reselected differently --
-  // this is a full reflow, not merely a step-size change (V1's fix), and
-  // raising the threshold (V1's own change) only delayed it, never
-  // removed it, exactly as flagged in this batch's own brief. A direction
-  // change is not itself the cause -- it's simply attention-grabbing when
-  // it happens to coincide with the threshold crossing on a long gesture
-  // that also happens to still be moving.
-  //
-  // Fixed by removing BOTH global resamples entirely: segments are walked
-  // in original order, one at a time, using ONLY that segment's own two
-  // endpoints (never any other point, never the array's current total
-  // length or count) -- so an earlier segment's emissions are, by
-  // construction, permanently fixed the instant they're computed, for the
-  // lifetime of the array. The `cap.maxEmissionPoints` ceiling is now
-  // enforced by simply STOPPING once it's reached (a hard append cutoff,
-  // never a re-selection of what's already been emitted) -- per this
-  // batch's own explicit instruction: "design it to preserve append/prefix
-  // stability rather than globally resampling the complete growing
-  // stroke." The trade-off is real and intentional: an extremely long
-  // gesture may stop gaining NEW spray coverage past the cap, but nothing
-  // already deposited can ever be altered by continuing to draw --
-  // stability is prioritized over completeness. `maxEmissionPoints` is
-  // sized generously (see both cap profiles' own values) to cover any
-  // realistic single gesture with margin.
   const maxStep = Math.max(1e-6, effectiveRadius * MIN_STEP_RATIO);
-
-  const emissions: SprayEmissionPoint[] = [{
-    ...points[0],
-    densityFactor: densityFactorForSegment(points[0], points[0], effectiveRadius),
-    flowFactor: pressureFlowFactor(points[0].pressure, pressureSignal),
-  }];
-  segmentLoop:
-  for (let index = 1; index < points.length; index += 1) {
-    const start = points[index - 1];
-    const end = points[index];
-    const density = densityFactorForSegment(start, end, effectiveRadius);
-    // Flow uses the SEGMENT's average pressure -- both endpoints, same
-    // "meaningful signal" gate as density's velocity check, deterministic
-    // from the two already-authored points.
-    const segmentPressure = start.pressure !== undefined && end.pressure !== undefined
-      ? (start.pressure + end.pressure) / 2
-      : start.pressure ?? end.pressure;
-    const flow = pressureFlowFactor(segmentPressure, pressureSignal);
-    const segmentLength = Math.hypot(end.x - start.x, end.y - start.y);
-    const steps = Math.max(1, Math.ceil(segmentLength / maxStep));
-    for (let step = 1; step <= steps; step += 1) {
-      if (emissions.length >= cap.maxEmissionPoints) break segmentLoop;
-      const t = step / steps;
-      emissions.push({ x: start.x + (end.x - start.x) * t, y: start.y + (end.y - start.y) * t, densityFactor: density, flowFactor: flow });
+  const emissions: SprayEmissionPoint[] = cursor ? [...cursor.emissions] : [];
+  let consumedPointCount = cursor?.consumedPointCount ?? 0;
+  if (!cursor) {
+    emissions.push({
+      ...points[0],
+      densityFactor: densityFactorForSegment(points[0], points[0], effectiveRadius),
+      flowFactor: pressureFlowFactor(points[0].pressure, pressureSignal),
+    });
+    consumedPointCount = 1;
+  }
+  if (emissions.length < cap.maxEmissionPoints) {
+    for (let index = consumedPointCount; index < points.length; index += 1) {
+      consumedPointCount = index + 1;
+      if (emitSprayEmissionSegment(emissions, points[index - 1], points[index], effectiveRadius, maxStep, pressureSignal, cap) === "stop") break;
     }
   }
-  return emissions;
+  return { emissions, consumedPointCount };
 }
 
 /**
@@ -734,6 +802,195 @@ export function resolveSprayEmissionPoints(
  * + seed + cap always produce the exact same particle list, live or on
  * replay from Firestore-persisted points.
  */
+/**
+ * SPRAY POINTER-UP RECONCILIATION V1 -- the per-emission particle body
+ * factored out of `resolveSprayParticlePlan`'s own loop (main particles +
+ * DUST + SPECKLE), unchanged, so `advanceSprayParticles` (below) can
+ * resume the SAME PRNG stream and append to the SAME running `particles`
+ * array one emission at a time, instead of each call starting a fresh
+ * `createSeededRandom(seed)` from scratch. `instabilityAt` is already
+ * documented BACKWARD-LOOKING ONLY (see its own doc) -- it reads
+ * `emissions[emissionIndex-2..emissionIndex-1]`, never anything after --
+ * so it's exactly as safe to evaluate mid-accumulation as it already was
+ * canonically; nothing about this extraction changes what any single
+ * emission's own particles depend on.
+ */
+function emitSprayParticlesForEmission(
+  particles: SprayParticle[],
+  emissions: readonly SprayEmissionPoint[],
+  emissionIndex: number,
+  effectiveRadius: number,
+  cap: SprayCapProfile,
+  random: () => number,
+): void {
+  const emission = emissions[emissionIndex];
+  // SPRAY INSTRUMENT EXPRESSION PASS -- WET SPUTTER character: local
+  // direction-change instability roughens this emission's own particle
+  // count/radius/alpha variance. 0 for an instabilityResponse: 0 cap (no
+  // behavior change at all).
+  const instability = cap.instabilityResponse > 0 ? instabilityAt(emissions, emissionIndex) * cap.instabilityResponse : 0;
+  // BLACKBOOK Spray Physicality V1 -- Pressure: flow (density/volume)
+  // scales particle COUNT here, folded in alongside the existing
+  // velocity/spacing densityFactor -- both are bounded, both come from
+  // already-authored, replayable data.
+  const particleCount = Math.min(
+    cap.maxParticlesPerEmission,
+    Math.max(1, Math.round(cap.baseParticlesPerEmission * emission.densityFactor * emission.flowFactor * (1 + instability * 0.6))),
+  );
+  for (let index = 0; index < particleCount; index += 1) {
+    const angle = random() * Math.PI * 2;
+    const normalizedRadius = random() ** cap.centerBias;
+    // Revision 5: exclude the innermost band entirely -- that's the
+    // core's job (see `particleMinRadiusRatio`'s doc). Remaps [0,1] into
+    // [particleMinRadiusRatio, 1] instead of [0,1].
+    const bandedRadius = cap.particleMinRadiusRatio + normalizedRadius * (1 - cap.particleMinRadiusRatio);
+    const offsetRadius = bandedRadius * effectiveRadius;
+    const edgeFalloff = (1 - normalizedRadius) ** cap.edgeSoftness;
+    const radiusJitter = (PARTICLE_RADIUS_JITTER_FLOOR + random() * (1 - PARTICLE_RADIUS_JITTER_FLOOR)) * (1 + (random() - 0.5) * instability);
+    // BLACKBOOK Spray Physicality V1 -- Pressure's secondary, much
+    // smaller (±6%) effect on particle radius (footprint), alongside its
+    // primary flow/density effect above.
+    const pressureRadius = pressureRadiusFactor(emission.pressure, emission.flowFactor !== 1);
+    particles.push({
+      x: emission.x + Math.cos(angle) * offsetRadius,
+      y: emission.y + Math.sin(angle) * offsetRadius,
+      // Spray Material Calibration V1: raised from 0.4 -- at Spray's own
+      // narrow-end authored width (DRAWING_WIDTH_RANGES.spray.min = 8,
+      // baseRadius = 4), the OLD floor let particles round down to a
+      // near-invisible sub-pixel dot, so narrow Spray read as a plain
+      // crisp thin line (Pen-like) with no aerosol texture at all --
+      // exactly the "must remain aerosol, not become Pen" defect this
+      // build exists to fix. A slightly higher absolute floor keeps
+      // narrow Spray's overspray genuinely visible without meaningfully
+      // changing the already-large broad-end particle sizes.
+      radius: Math.max(1.1, effectiveRadius * cap.particleRadiusRatio * radiusJitter * pressureRadius),
+      alpha: clamp(cap.baseParticleAlpha * edgeFalloff * clamp(emission.densityFactor, 0.4, 1.4) * (1 - instability * 0.25), 0, 1),
+    });
+  }
+
+  // SPRAY INSTRUMENT EXPRESSION PASS -- DUST: a few extra, faint,
+  // far-flung particles on genuinely FAST/dispersed emissions (low
+  // densityFactor), emerging from the same aerosol deposition model
+  // rather than a separate decorative stamp. 0 for dustResponse: 0.
+  if (cap.dustResponse > 0 && emission.densityFactor < 0.85) {
+    const dustStrength = (0.85 - emission.densityFactor) * cap.dustResponse;
+    const dustCount = Math.round(dustStrength * 6);
+    for (let d = 0; d < dustCount; d += 1) {
+      const angle = random() * Math.PI * 2;
+      const dustOffset = effectiveRadius * (1 + random() * 0.6); // beyond the normal footprint
+      particles.push({
+        x: emission.x + Math.cos(angle) * dustOffset,
+        y: emission.y + Math.sin(angle) * dustOffset,
+        radius: Math.max(0.6, effectiveRadius * cap.particleRadiusRatio * 0.45 * (0.6 + random() * 0.4)),
+        alpha: clamp(cap.baseParticleAlpha * 0.3 * dustStrength, 0, 1),
+      });
+    }
+  }
+
+  // SPRAY INSTRUMENT EXPRESSION PASS -- SPECKLE: a few extra, larger,
+  // denser coarse droplets on a DWELLED emission (high densityFactor,
+  // short of this material's own drip threshold) -- distinct from
+  // ordinary fine aerosol grain. 0 for speckleResponse: 0.
+  if (cap.speckleResponse > 0 && emission.densityFactor > 1.15) {
+    const speckleStrength = (emission.densityFactor - 1.15) * cap.speckleResponse;
+    const speckleCount = Math.round(speckleStrength * 4);
+    for (let s = 0; s < speckleCount; s += 1) {
+      const angle = random() * Math.PI * 2;
+      const speckleOffset = effectiveRadius * (cap.particleMinRadiusRatio + random() * (1 - cap.particleMinRadiusRatio) * 0.5);
+      particles.push({
+        x: emission.x + Math.cos(angle) * speckleOffset,
+        y: emission.y + Math.sin(angle) * speckleOffset,
+        radius: Math.max(1.4, effectiveRadius * cap.particleRadiusRatio * 1.7 * (0.8 + random() * 0.4)),
+        alpha: clamp(cap.baseParticleAlpha * 1.2, 0, 1),
+      });
+    }
+  }
+}
+
+/**
+ * SPRAY POINTER-UP RECONCILIATION V1 -- resumable counterpart to
+ * `resolveSprayParticlePlan`'s particle-generation half (emission
+ * resolution is `advanceSprayEmissionPoints`'s own job). `cursor` (`null`
+ * to start fresh) carries the running `particles` array, how many
+ * emissions have already been turned into particles, and the seeded
+ * PRNG's own `state` -- so this call resumes the EXACT SAME PRNG sequence
+ * a single `resolveSprayParticlePlan` call would use, consuming draws for
+ * only the NEW emissions in `emissionCursor` (never re-drawing for ones
+ * already processed, never restarting the stream from `seed`). This is
+ * the fix for the measured live-preview PRNG-restart divergence: a live
+ * preview that calls this once per animation frame, threading the
+ * returned cursor through, produces a particle sequence identical to one
+ * continuous canonical computation -- not merely a similarly-sized one.
+ */
+export interface SprayParticleCursor {
+  readonly particles: readonly SprayParticle[];
+  readonly consumedEmissionCount: number;
+  readonly randomState: number;
+}
+
+export function advanceSprayParticles(
+  cursor: SprayParticleCursor | null,
+  seed: number,
+  emissionCursor: SprayEmissionCursor,
+  baseRadius: number,
+  cap: SprayCapProfile = STUDIORICH_STOCK_CAP,
+): SprayParticleCursor {
+  const effectiveRadius = baseRadius * cap.footprintRadiusScale;
+  const particles = cursor ? [...cursor.particles] : [];
+  const randomStream = cursor ? createSeededRandomStream(seed, cursor.randomState) : createSeededRandomStream(seed);
+  const startIndex = cursor?.consumedEmissionCount ?? 0;
+  for (let emissionIndex = startIndex; emissionIndex < emissionCursor.emissions.length; emissionIndex += 1) {
+    emitSprayParticlesForEmission(particles, emissionCursor.emissions, emissionIndex, effectiveRadius, cap, randomStream.next);
+  }
+  return { particles, consumedEmissionCount: emissionCursor.emissions.length, randomState: randomStream.state };
+}
+
+/**
+ * SPRAY POINTER-UP RECONCILIATION V1 -- the ONE whole-gesture-dependent
+ * step this engine has: the tail FLARE (`tailFlareFactor`) can only be
+ * evaluated once the gesture's final emissions are actually known, so it
+ * is deliberately never part of `advanceSprayParticles`'s own per-frame
+ * work -- only this explicit finalize call, made exactly once (at
+ * pointer-up, once the complete emission list is final), adds it.
+ * Internally catches the cursor up on any not-yet-consumed emissions
+ * first (the ordinary resumed-stream path), so a caller doesn't need to
+ * call `advanceSprayParticles` one last time itself before finalizing.
+ */
+export function finalizeSprayParticles(
+  cursor: SprayParticleCursor | null,
+  seed: number,
+  emissionCursor: SprayEmissionCursor,
+  baseRadius: number,
+  cap: SprayCapProfile = STUDIORICH_STOCK_CAP,
+): readonly SprayParticle[] {
+  const caughtUp = advanceSprayParticles(cursor, seed, emissionCursor, baseRadius, cap);
+  const particles = [...caughtUp.particles];
+  const effectiveRadius = baseRadius * cap.footprintRadiusScale;
+  const flare = cap.flareResponse > 0 ? tailFlareFactor(emissionCursor.emissions) : 0;
+  // SPRAY INSTRUMENT EXPRESSION PASS -- FLARE: a decelerating RELEASE at
+  // the gesture's own tail spawns extra, wider-flung particles there, per
+  // this pass's own "speed, acceleration, release...can produce a
+  // convincing gesture-driven flare" brief. Bounded (never more than
+  // maxParticlesPerEmission extra), gated entirely by `flareResponse` so a
+  // Precision cap (flareResponse: 0) never flares regardless of release.
+  if (flare > 0 && emissionCursor.emissions.length > 0) {
+    const randomStream = createSeededRandomStream(seed, caughtUp.randomState);
+    const lastEmission = emissionCursor.emissions[emissionCursor.emissions.length - 1];
+    const flareCount = Math.min(cap.maxParticlesPerEmission, Math.round(flare * cap.flareResponse * cap.maxParticlesPerEmission));
+    for (let index = 0; index < flareCount; index += 1) {
+      const angle = randomStream.next() * Math.PI * 2;
+      const flareOffset = effectiveRadius * (1 + randomStream.next() * 1.4 * flare * cap.flareResponse);
+      particles.push({
+        x: lastEmission.x + Math.cos(angle) * flareOffset,
+        y: lastEmission.y + Math.sin(angle) * flareOffset,
+        radius: Math.max(1, effectiveRadius * cap.particleRadiusRatio * (0.6 + randomStream.next() * 0.6)),
+        alpha: clamp(cap.baseParticleAlpha * (0.5 + flare * 0.5), 0, 1),
+      });
+    }
+  }
+  return particles;
+}
+
 export function resolveSprayParticlePlan(
   points: readonly SprayPoint[],
   baseRadius: number,
@@ -741,117 +998,8 @@ export function resolveSprayParticlePlan(
   cap: SprayCapProfile = STUDIORICH_STOCK_CAP,
 ): readonly SprayParticle[] {
   if (baseRadius <= 0) return [];
-  const effectiveRadius = baseRadius * cap.footprintRadiusScale;
-  const emissions = resolveSprayEmissionPoints(points, baseRadius, cap);
-  const random = createSeededRandom(seed);
-  const particles: SprayParticle[] = [];
-  const flare = cap.flareResponse > 0 ? tailFlareFactor(emissions) : 0;
-  for (let emissionIndex = 0; emissionIndex < emissions.length; emissionIndex += 1) {
-    const emission = emissions[emissionIndex];
-    // SPRAY INSTRUMENT EXPRESSION PASS -- WET SPUTTER character: local
-    // direction-change instability roughens this emission's own particle
-    // count/radius/alpha variance. 0 for an instabilityResponse: 0 cap (no
-    // behavior change at all).
-    const instability = cap.instabilityResponse > 0 ? instabilityAt(emissions, emissionIndex) * cap.instabilityResponse : 0;
-    // BLACKBOOK Spray Physicality V1 -- Pressure: flow (density/volume)
-    // scales particle COUNT here, folded in alongside the existing
-    // velocity/spacing densityFactor -- both are bounded, both come from
-    // already-authored, replayable data.
-    const particleCount = Math.min(
-      cap.maxParticlesPerEmission,
-      Math.max(1, Math.round(cap.baseParticlesPerEmission * emission.densityFactor * emission.flowFactor * (1 + instability * 0.6))),
-    );
-    for (let index = 0; index < particleCount; index += 1) {
-      const angle = random() * Math.PI * 2;
-      const normalizedRadius = random() ** cap.centerBias;
-      // Revision 5: exclude the innermost band entirely -- that's the
-      // core's job (see `particleMinRadiusRatio`'s doc). Remaps [0,1] into
-      // [particleMinRadiusRatio, 1] instead of [0,1].
-      const bandedRadius = cap.particleMinRadiusRatio + normalizedRadius * (1 - cap.particleMinRadiusRatio);
-      const offsetRadius = bandedRadius * effectiveRadius;
-      const edgeFalloff = (1 - normalizedRadius) ** cap.edgeSoftness;
-      const radiusJitter = (PARTICLE_RADIUS_JITTER_FLOOR + random() * (1 - PARTICLE_RADIUS_JITTER_FLOOR)) * (1 + (random() - 0.5) * instability);
-      // BLACKBOOK Spray Physicality V1 -- Pressure's secondary, much
-      // smaller (±6%) effect on particle radius (footprint), alongside its
-      // primary flow/density effect above.
-      const pressureRadius = pressureRadiusFactor(emission.pressure, emission.flowFactor !== 1);
-      particles.push({
-        x: emission.x + Math.cos(angle) * offsetRadius,
-        y: emission.y + Math.sin(angle) * offsetRadius,
-        // Spray Material Calibration V1: raised from 0.4 -- at Spray's own
-        // narrow-end authored width (DRAWING_WIDTH_RANGES.spray.min = 8,
-        // baseRadius = 4), the OLD floor let particles round down to a
-        // near-invisible sub-pixel dot, so narrow Spray read as a plain
-        // crisp thin line (Pen-like) with no aerosol texture at all --
-        // exactly the "must remain aerosol, not become Pen" defect this
-        // build exists to fix. A slightly higher absolute floor keeps
-        // narrow Spray's overspray genuinely visible without meaningfully
-        // changing the already-large broad-end particle sizes.
-        radius: Math.max(1.1, effectiveRadius * cap.particleRadiusRatio * radiusJitter * pressureRadius),
-        alpha: clamp(cap.baseParticleAlpha * edgeFalloff * clamp(emission.densityFactor, 0.4, 1.4) * (1 - instability * 0.25), 0, 1),
-      });
-    }
-
-    // SPRAY INSTRUMENT EXPRESSION PASS -- DUST: a few extra, faint,
-    // far-flung particles on genuinely FAST/dispersed emissions (low
-    // densityFactor), emerging from the same aerosol deposition model
-    // rather than a separate decorative stamp. 0 for dustResponse: 0.
-    if (cap.dustResponse > 0 && emission.densityFactor < 0.85) {
-      const dustStrength = (0.85 - emission.densityFactor) * cap.dustResponse;
-      const dustCount = Math.round(dustStrength * 6);
-      for (let d = 0; d < dustCount; d += 1) {
-        const angle = random() * Math.PI * 2;
-        const dustOffset = effectiveRadius * (1 + random() * 0.6); // beyond the normal footprint
-        particles.push({
-          x: emission.x + Math.cos(angle) * dustOffset,
-          y: emission.y + Math.sin(angle) * dustOffset,
-          radius: Math.max(0.6, effectiveRadius * cap.particleRadiusRatio * 0.45 * (0.6 + random() * 0.4)),
-          alpha: clamp(cap.baseParticleAlpha * 0.3 * dustStrength, 0, 1),
-        });
-      }
-    }
-
-    // SPRAY INSTRUMENT EXPRESSION PASS -- SPECKLE: a few extra, larger,
-    // denser coarse droplets on a DWELLED emission (high densityFactor,
-    // short of this material's own drip threshold) -- distinct from
-    // ordinary fine aerosol grain. 0 for speckleResponse: 0.
-    if (cap.speckleResponse > 0 && emission.densityFactor > 1.15) {
-      const speckleStrength = (emission.densityFactor - 1.15) * cap.speckleResponse;
-      const speckleCount = Math.round(speckleStrength * 4);
-      for (let s = 0; s < speckleCount; s += 1) {
-        const angle = random() * Math.PI * 2;
-        const speckleOffset = effectiveRadius * (cap.particleMinRadiusRatio + random() * (1 - cap.particleMinRadiusRatio) * 0.5);
-        particles.push({
-          x: emission.x + Math.cos(angle) * speckleOffset,
-          y: emission.y + Math.sin(angle) * speckleOffset,
-          radius: Math.max(1.4, effectiveRadius * cap.particleRadiusRatio * 1.7 * (0.8 + random() * 0.4)),
-          alpha: clamp(cap.baseParticleAlpha * 1.2, 0, 1),
-        });
-      }
-    }
-  }
-
-  // SPRAY INSTRUMENT EXPRESSION PASS -- FLARE: a decelerating RELEASE at
-  // the gesture's own tail spawns extra, wider-flung particles there, per
-  // this pass's own "speed, acceleration, release...can produce a
-  // convincing gesture-driven flare" brief. Bounded (never more than
-  // maxParticlesPerEmission extra), gated entirely by `flareResponse` so a
-  // Precision cap (flareResponse: 0) never flares regardless of release.
-  if (flare > 0) {
-    const lastEmission = emissions[emissions.length - 1];
-    const flareCount = Math.min(cap.maxParticlesPerEmission, Math.round(flare * cap.flareResponse * cap.maxParticlesPerEmission));
-    for (let index = 0; index < flareCount; index += 1) {
-      const angle = random() * Math.PI * 2;
-      const flareOffset = effectiveRadius * (1 + random() * 1.4 * flare * cap.flareResponse);
-      particles.push({
-        x: lastEmission.x + Math.cos(angle) * flareOffset,
-        y: lastEmission.y + Math.sin(angle) * flareOffset,
-        radius: Math.max(1, effectiveRadius * cap.particleRadiusRatio * (0.6 + random() * 0.6)),
-        alpha: clamp(cap.baseParticleAlpha * (0.5 + flare * 0.5), 0, 1),
-      });
-    }
-  }
-  return particles;
+  const emissionCursor = advanceSprayEmissionPoints(null, points, baseRadius, cap);
+  return finalizeSprayParticles(null, seed, emissionCursor, baseRadius, cap);
 }
 
 export interface SprayCorePoint extends SprayPoint {

@@ -797,9 +797,103 @@ turns into `particleRendering: "flat"` — the exact same
 `resolveSprayParticlePlan` output (same positions, same count, same radius/
 alpha, same deposition plan), painted with a single flat `fill()` instead
 of a per-particle gradient. Like the PRNG-restart approximation above, this
-is a disclosed, transient, live-only cosmetic approximation: `pointerup`
-always bakes the canonical soft-gradient particle fill, unchanged. Mop and
-every other material never read `renderMode` and are unaffected.
+was a disclosed, transient, live-only cosmetic approximation at the time:
+`pointerup` always baked the canonical soft-gradient particle fill in one
+synchronous call. Mop and every other material never read `renderMode` and
+are unaffected. **Superseded by Problem 4 below** — `pointerup`'s own
+synchronous canonical bake turned out to itself be the next bottleneck, and
+fixing it also replaced the windowed particle field this paragraph
+describes with the incremental one Problem 4 introduces; `renderMode`/
+`particleRendering` and `fillSprayParticleFlat` are unchanged and still
+exist exactly as described here.
+
+**Problem 4 (SPRAY POINTER-UP RECONCILIATION V1 — the pointer-up stall
+Problem 3 left untouched, plus the live/canonical divergence that made its
+swap visible):** live Spray (Problem 3) and every other tool's live
+preview now tracked the Apple Pencil in real time, but lifting the pointer
+on a Spray stroke produced a new, separate ~5s visible stall, and the
+stroke's appearance visibly changed the instant that stall resolved.
+Recon (dev-only instrumentation, timing waterfall) isolated both:
+
+1. **The stall was `pointerup`'s own synchronous canonical bake, never
+   persistence.** `drawOperation(operation, committedLayers)` — called
+   synchronously, directly inside the `pointerup` handler — ran Spray's
+   canonical particle paint (`createRadialGradient()` per particle) for
+   the COMPLETE, final gesture in one blocking call: 18,000–26,000
+   gradient fills for a typical fast continuous stroke (Spray's
+   `maxEmissionPoints` ceiling is 3000 per cap vs. Mop's 260 — an ~11.5x
+   asymmetry before even multiplying by particles-per-emission), measured
+   structurally as the entire source of the stall. `persistence.persistStroke`
+   is `void`-called (fire-and-forget) immediately after and was never the
+   bottleneck.
+2. **Live and canonical Spray were computing genuinely different particle
+   sets, not just rendering them differently.** The windowed live preview
+   (Problem 1/3) called `resolveSprayParticlePlan` fresh once per
+   animation frame, each call re-seeding `createSeededRandom(seed)` from
+   scratch for that window's own slice, plus a deliberate 1-point window
+   overlap (for segment continuity) that double-emitted at each seam.
+   Canonical made ONE call across the whole stroke with one continuous
+   PRNG stream. Measured on a representative stroke: the live-cumulative
+   particle count ran ~19.3% higher than canonical — so pointer-up's swap
+   wasn't merely slow, it was swapping in a measurably different
+   deposition.
+
+**Fix, in `sprayDeposition.ts`:** the emission-walk and particle-generation
+loops (`resolveSprayEmissionPoints`/`resolveSprayParticlePlan`'s own
+former bodies) were factored into resumable primitives —
+`advanceSprayEmissionPoints`/`advanceSprayParticles`/
+`finalizeSprayParticles`, built around a new `createSeededRandomStream`
+(the same mulberry32-family generator as `createSeededRandom`, but
+exposing its own `state` so a caller can snapshot it after N draws and
+resume the EXACT same sequence later). A `SprayEmissionCursor`/
+`SprayParticleCursor` threaded across many calls — one per animation
+frame, fed the FULL growing `points` every time, never a slice — produces
+a particle sequence that is byte-identical to one continuous canonical
+call, because it IS that same call, just paid for incrementally. The one
+whole-gesture-dependent value this engine has (the tail FLARE,
+`tailFlareFactor`, which can only be evaluated once the gesture's true end
+is known) is deliberately never part of the per-frame `advance` step —
+only `finalizeSprayParticles`, called once, at pointer-up, adds it.
+`resolveSprayEmissionPoints`/`resolveSprayParticlePlan` themselves now
+delegate to these primitives with a `null` (fresh) cursor, so every
+existing caller (canonical bake-from-scratch, reload) is byte-identical
+to before by construction, not by a second parallel implementation that
+could drift.
+
+**Fix, in `blackbookRuntime.ts`:** `advanceLivePreview`'s Spray branch
+(`advanceSprayLivePreview`) now threads a gesture-scoped
+`sprayEmissionCursor`/`sprayParticleCursor` through the above every frame,
+painting only the newly-added particles (flat fill, unchanged from
+Problem 3) onto the never-cleared live-preview canvas — core passes are
+untouched (same per-window slice, routed through `strokeSpray`'s own
+core-pass logic via a `particles: []` override that suppresses only its
+particle half). `pointerup`'s Spray branch (`beginSprayCanonicalBake`) no
+longer calls `drawOperation` synchronously at all: it resolves the
+complete, final particle list (cheap — `finalizeSprayParticles` only
+catches up on the last few points the live preview hadn't reached, plus
+the one-time flare), copies the live preview's own already-shown pixels
+into a dedicated `pendingCanvas` (zero-cost — the artist's eye was already
+on exactly those pixels), and queues a `PendingSprayBake` that
+`runSprayBakeFrame` drains across many animation frames, each bounded to
+`SPRAY_BAKE_FRAME_BUDGET_MS` (a time budget checked via `performance.now()`,
+not a guessed particle-count-per-frame constant — real per-particle
+gradient-fill cost on-device was never measured synthetically). `render()`
+composites every in-flight `pendingCanvas` on top of `committedLayers.spray`
+(whether or not Spray is the actively-drawn material that frame) for as
+long as any bake remains queued, so the stroke never disappears or jumps
+mid-bake; once a bake's `bakeCanvas` (gradient-filled, painted on a
+separate blank canvas so it never layers additively on top of the flat
+`pendingCanvas`) is complete, it's merged into `committedLayers.spray` in
+one `drawImage` and the queue entry is dropped — FIFO, so merges never
+reorder relative to `operations`' own append order. `rebuildCommittedCacheIfNeeded`
+drops the whole `pendingSprayBakes` queue as its first step whenever it
+runs (Undo, CLEAR, Pages switching, resize): the full replay below it
+either excludes a removed operation correctly or re-bakes a still-present
+one canonically via the unchanged synchronous `drawOperation` path, so a
+stale in-flight bake is never wrong either way. Persisted Mark shape,
+drip generation/semantics, Undo grouping, and cap behavior are all
+completely unaffected — this is a rendering-scheduling fix layered on top
+of the same unchanged deterministic generators.
 
 **Development-only diagnostics**: `window.__blackbookRenderDiagnostics`
 (gated on `import.meta.env.DEV`, never active in a production build, never

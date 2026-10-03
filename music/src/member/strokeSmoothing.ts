@@ -19,7 +19,7 @@
  * authored geometry itself. The persisted Mark's points are never touched.
  */
 
-import { hashSeed, resolveSprayCorePlan, resolveSprayParticlePlan, STUDIORICH_STOCK_CAP, type SprayCapProfile } from "./sprayDeposition";
+import { hashSeed, resolveSprayCorePlan, resolveSprayParticlePlan, STUDIORICH_STOCK_CAP, type SprayCapProfile, type SprayParticle } from "./sprayDeposition";
 import { resolveMopDabPlan } from "./mopDeposition";
 
 export interface SmoothablePoint {
@@ -704,6 +704,40 @@ export function strokeMaterialDrip(
  */
 export interface StrokeSprayOptions {
   readonly particleRendering?: "gradient" | "flat";
+  /**
+   * SPRAY POINTER-UP RECONCILIATION V1 -- when supplied, `strokeSpray`
+   * paints EXACTLY this particle list instead of calling
+   * `resolveSprayParticlePlan` itself. The live preview (via its own
+   * incremental `SprayParticleCursor`, blackbookRuntime.ts) and the
+   * multi-frame canonical bake (pointer-up) both already hold their own
+   * already-resolved, cursor-tracked particle list -- this lets them paint
+   * it directly, each call painting only the SLICE of particles it's
+   * responsible for that frame, rather than recomputing (and repainting
+   * from scratch) the whole deposition every call the way a bare `points`
+   * call would. Core passes are completely unaffected -- they're still
+   * resolved internally from `points`, exactly as before this option
+   * existed.
+   */
+  readonly particles?: readonly SprayParticle[];
+}
+
+/**
+ * SPRAY POINTER-UP RECONCILIATION V1 -- the particle-painting half of
+ * `strokeSpray`'s own body, factored out so the multi-frame canonical bake
+ * (blackbookRuntime.ts) can paint one CHUNK of an already-resolved
+ * particle list per animation frame using the exact same primitive
+ * `strokeSpray` itself uses, without re-entering emission/particle
+ * generation at all.
+ */
+export function paintSprayParticles(
+  ctx: CanvasRenderingContext2D,
+  particles: readonly SprayParticle[],
+  color: string,
+  opacity: number,
+  particleRendering: "gradient" | "flat" = "gradient",
+): void {
+  const fillParticle = particleRendering === "flat" ? fillSprayParticleFlat : fillSprayParticle;
+  for (const particle of particles) fillParticle(ctx, particle, color, opacity);
 }
 
 export function strokeSpray(
@@ -717,7 +751,6 @@ export function strokeSpray(
   if (points.length < 2) return;
   const seed = hashSeed(seedSource);
   const baseRadius = style.width * 0.5;
-  const fillParticle = options?.particleRendering === "flat" ? fillSprayParticleFlat : fillSprayParticle;
 
   ctx.save();
   ctx.globalCompositeOperation = "source-over";
@@ -737,8 +770,7 @@ export function strokeSpray(
 
   ctx.save();
   ctx.globalCompositeOperation = "source-over";
-  for (const particle of resolveSprayParticlePlan(points, baseRadius, seed, cap)) {
-    fillParticle(ctx, particle, style.color, style.opacity);
-  }
+  const particles = options?.particles ?? resolveSprayParticlePlan(points, baseRadius, seed, cap);
+  paintSprayParticles(ctx, particles, style.color, style.opacity, options?.particleRendering ?? "gradient");
   ctx.restore();
 }

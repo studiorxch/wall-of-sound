@@ -4,6 +4,7 @@ import {
   fillSprayParticle,
   hash01,
   hashLateralUnit,
+  paintSprayParticles,
   resolveGraphiteProfile,
   strokeGraphite,
   strokeInk,
@@ -878,6 +879,75 @@ describe("strokeSpray -- Spray Material Calibration V1", () => {
       const arcCount = (calls: readonly string[]) => calls.filter((call) => call.startsWith("arc(")).length;
       expect(arcCount(fat.calls)).not.toBe(arcCount(stock.calls));
     });
+  });
+
+  /**
+   * SPRAY POINTER-UP RECONCILIATION V1 -- `particles` lets a caller that
+   * already holds an externally-resolved (cursor-based, incremental, or
+   * chunked) particle list paint EXACTLY that list instead of re-entering
+   * `resolveSprayParticlePlan`. Core passes are always resolved/painted
+   * internally from `points`, regardless of this option -- it only ever
+   * replaces the particle HALF of `strokeSpray`'s own work.
+   */
+  describe("particles override option -- SPRAY POINTER-UP RECONCILIATION V1", () => {
+    it("an explicit particles: [] suppresses all particle painting while still painting core passes -- the live-preview/canonical-bake split this option exists for", () => {
+      const suppressed = fakeMopContext();
+      strokeSpray(suppressed.ctx as never, points, style, "mark-a", undefined, { particles: [] });
+      const arcCalls = suppressed.calls.filter((call) => call.startsWith("arc(")).length;
+      expect(arcCalls).toBe(0);
+      const strokeCalls = suppressed.calls.filter((call) => call === "stroke").length;
+      expect(strokeCalls).toBeGreaterThan(0); // core passes still painted
+    });
+
+    it("an explicit particles list is painted verbatim, never recomputed from points -- a deliberately-mismatched list proves this isn't silently ignored", () => {
+      const explicitParticles = [
+        { x: 5, y: 5, radius: 3, alpha: 1 },
+        { x: 50, y: 50, radius: 2, alpha: 0.5 },
+      ];
+      const { ctx, calls } = fakeMopContext();
+      strokeSpray(ctx as never, points, style, "mark-a", undefined, { particles: explicitParticles });
+      const arcCalls = calls.filter((call) => call.startsWith("arc("));
+      expect(arcCalls).toEqual(["arc(5,5,3)", "arc(50,50,2)"]);
+    });
+
+    it("omitting particles entirely still resolves+paints the full canonical particle plan, byte-identical to no option at all", () => {
+      const withoutOption = fakeMopContext();
+      strokeSpray(withoutOption.ctx as never, points, style, "mark-a");
+      const explicitUndefined = fakeMopContext();
+      strokeSpray(explicitUndefined.ctx as never, points, style, "mark-a", undefined, { particles: undefined });
+      expect(withoutOption.calls).toEqual(explicitUndefined.calls);
+    });
+
+    it("particleRendering still governs the fill primitive used for an explicit particles list -- the two options compose rather than one silently overriding the other", () => {
+      const explicitParticles = [{ x: 10, y: 10, radius: 4, alpha: 1 }];
+      const gradient = fakeMopContext();
+      strokeSpray(gradient.ctx as never, points, style, "mark-a", undefined, { particles: explicitParticles, particleRendering: "gradient" });
+      expect(gradient.createRadialGradientCallCount).toBe(1);
+      const flat = fakeMopContext();
+      strokeSpray(flat.ctx as never, points, style, "mark-a", undefined, { particles: explicitParticles, particleRendering: "flat" });
+      expect(flat.createRadialGradientCallCount).toBe(0);
+    });
+  });
+});
+
+describe("paintSprayParticles -- SPRAY POINTER-UP RECONCILIATION V1", () => {
+  it("paints each particle via gradient fill by default, matching strokeSpray's own canonical primitive", () => {
+    const fake = fakeMopContext();
+    paintSprayParticles(fake.ctx as never, [{ x: 1, y: 2, radius: 3, alpha: 1 }, { x: 4, y: 5, radius: 6, alpha: 0.5 }], "#000", 1);
+    expect(fake.createRadialGradientCallCount).toBe(2);
+    expect(fake.calls.filter((call) => call.startsWith("arc("))).toEqual(["arc(1,2,3)", "arc(4,5,6)"]);
+  });
+
+  it("paints flat (no gradient) when told to -- the primitive a chunked canonical bake or the live preview actually calls per frame", () => {
+    const fake = fakeMopContext();
+    paintSprayParticles(fake.ctx as never, [{ x: 1, y: 2, radius: 3, alpha: 1 }], "#000", 1, "flat");
+    expect(fake.createRadialGradientCallCount).toBe(0);
+  });
+
+  it("an empty particle list paints nothing", () => {
+    const { calls, ctx } = fakeMopContext();
+    paintSprayParticles(ctx as never, [], "#000", 1);
+    expect(calls).toEqual([]);
   });
 });
 

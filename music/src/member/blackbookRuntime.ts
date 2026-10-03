@@ -24,6 +24,7 @@ import {
   withActiveArtworkUrlParam,
   type BlackbookDrip,
   type BlackbookOperation,
+  type BlackbookStroke,
 } from "./blackbookArtworkBridge";
 import { createCartesianCamera, type CartesianCamera, type DocRect } from "./cartesianWorkspaceCamera";
 import { createStableMarkId } from "./mapArtworkBridge";
@@ -33,6 +34,7 @@ import { createCurrentArtworkSession } from "./currentArtworkSession";
 import { numberArtworksForPagesDrawer, pickReplacementArtworkId } from "./artworkGallery";
 import { drawArtworkThumbnail } from "./artworkThumbnail";
 import {
+  paintSprayParticles,
   resolveGraphiteProfile,
   strokeGraphite,
   strokeInk,
@@ -45,7 +47,23 @@ import {
   GRAPHITE_PROFILE_VERSION,
   type GraphiteGradeId,
 } from "./strokeSmoothing";
-import { resolveSprayCapProfile, resolveSprayDripPlans, hashSeed, DEFAULT_SPRAY_CAP_ID, STUDIORICH_STOCK_CAP, STUDIORICH_FAT_CAP, STUDIORICH_PRECISION_CAP, STUDIORICH_CALLIGRAPHY_CAP } from "./sprayDeposition";
+import {
+  advanceSprayEmissionPoints,
+  advanceSprayParticles,
+  finalizeSprayParticles,
+  resolveSprayCapProfile,
+  resolveSprayDripPlans,
+  hashSeed,
+  DEFAULT_SPRAY_CAP_ID,
+  STUDIORICH_STOCK_CAP,
+  STUDIORICH_FAT_CAP,
+  STUDIORICH_PRECISION_CAP,
+  STUDIORICH_CALLIGRAPHY_CAP,
+  type SprayCapProfile,
+  type SprayEmissionCursor,
+  type SprayParticle,
+  type SprayParticleCursor,
+} from "./sprayDeposition";
 import { resolveMopDripPlans } from "./mopDeposition";
 import { createBlackbookHomeSurface } from "../home/blackbookHomeSurface";
 
@@ -288,6 +306,8 @@ function resizeCanvasesToDisplaySize(): void {
   // explicitly (e.g. the PAGES drawer's own width transition).
   committedCacheDirty = true;
   liveBakedPointCount = 0;
+  sprayEmissionCursor = null;
+  sprayParticleCursor = null;
 }
 
 let operations: BlackbookOperation[] = [];
@@ -309,6 +329,65 @@ let committedCacheDirty = true;
  * (pan/zoom/viewport size) changes mid-gesture -- see `advanceLivePreview`.
  */
 let liveBakedPointCount = 0;
+/**
+ * SPRAY POINTER-UP RECONCILIATION V1 -- the current gesture's own
+ * incremental Spray deposition cursors (null = nothing resolved yet this
+ * gesture). `advanceLivePreview` threads FULL, growing `activePoints`
+ * through these every frame (never a window slice) via
+ * `advanceSprayEmissionPoints`/`advanceSprayParticles` -- each call
+ * resumes the SAME seeded PRNG stream and emission walk instead of
+ * restarting it, which is what eliminates the live-vs-canonical particle-
+ * count divergence recon measured (~19.3% on a representative stroke).
+ * Reset to null at exactly the same points `liveBakedPointCount` resets
+ * to 0 (pointerdown, camera-signature change) plus pointerup, once
+ * `beginSprayCanonicalBake` has read them -- never carried over into a
+ * different gesture.
+ */
+let sprayEmissionCursor: SprayEmissionCursor | null = null;
+let sprayParticleCursor: SprayParticleCursor | null = null;
+
+/**
+ * SPRAY POINTER-UP RECONCILIATION V1 -- one just-committed Spray stroke's
+ * still-in-progress canonical (soft-gradient) repaint. `pendingCanvas`
+ * holds the EXACT pixels the live preview already showed at the moment of
+ * pointer-up (copied, never repainted, so there is zero visible
+ * difference the instant this bake begins) and is what `render()`
+ * composites on top of `committedLayers.spray` for as long as this entry
+ * exists. `bakeCanvas` starts blank and accumulates the real canonical
+ * particles (gradient-filled, the expensive primitive recon identified)
+ * in bounded per-frame chunks via `runSprayBakeFrame` -- invisible until
+ * complete, at which point it's merged into `committedLayers.spray` in
+ * one `drawImage` and this entry is dropped. Painting the canonical
+ * gradient version onto a SEPARATE blank canvas (rather than layering it
+ * additively on top of `pendingCanvas`'s own already-painted flat pixels)
+ * is deliberate -- additive source-over blending would double-expose the
+ * overlap instead of cleanly replacing it. A plain array (never more than
+ * a small handful of entries in practice) rather than a single slot
+ * because a fast artist CAN start and finish a short second Spray gesture
+ * before a long first one's bake completes -- `operations` already
+ * carries both in the correct order, and bakes are drained strictly FIFO
+ * (oldest first) in `runSprayBakeFrame`, so a later merge never reorders
+ * an earlier one.
+ */
+interface PendingSprayBake {
+  readonly operationId: string;
+  readonly pendingCanvas: HTMLCanvasElement;
+  readonly bakeCanvas: HTMLCanvasElement;
+  readonly bakeContext: CanvasRenderingContext2D;
+  readonly screenPoints: readonly { readonly x: number; readonly y: number; readonly tMs?: number; readonly pressure?: number }[];
+  readonly scaledStyle: { readonly color: string; readonly width: number; readonly opacity: number };
+  readonly cap: SprayCapProfile;
+  readonly particles: readonly SprayParticle[];
+  corePassesPainted: boolean;
+  nextParticleIndex: number;
+}
+let pendingSprayBakes: PendingSprayBake[] = [];
+let sprayBakeFrameScheduled = false;
+/** A conservative per-frame time budget for `runSprayBakeFrame`'s particle-painting chunk -- leaves headroom in a 16ms frame for everything else `render()` already does, on whatever hardware this runs on. Adaptive by construction (checked via `performance.now()`, never a guessed particle-count-per-frame constant) because the real per-particle gradient-fill cost this batch's own recon could not measure synthetically is exactly what determines how many particles actually fit in that time. */
+const SPRAY_BAKE_FRAME_BUDGET_MS = 6;
+/** How many particles `runSprayBakeFrame` paints before re-checking the time budget -- coarse enough to keep `performance.now()` call overhead negligible, fine enough that one frame is never overshot by more than this many particles' worth of paint time. */
+const SPRAY_BAKE_CHECK_INTERVAL = 200;
+
 let lastCameraSignature: string | null = null;
 /**
  * BLACKBOOK CLEAR + Single-Step Undo V1 -- set the instant CLEAR runs,
@@ -448,57 +527,117 @@ function currentCameraSignature(): string {
  */
 function rebuildCommittedCacheIfNeeded(): void {
   if (!committedCacheDirty) return;
+  // SPRAY POINTER-UP RECONCILIATION V1 -- a wholesale Mark-set/viewport
+  // change (Undo, CLEAR, Pages switching, resize, ...) is about to fully
+  // replay `operations` below via the unchanged synchronous canonical
+  // `drawOperation` path -- any spray bake still in flight is stale
+  // either way (if its own operation was just removed, baking it in
+  // would be wrong; if it's still present, the loop below already
+  // re-bakes it canonically, synchronously). Dropping the queue here, in
+  // this ONE place, is what keeps every `committedCacheDirty = true` call
+  // site correct without having to individually remember to also clear it.
+  pendingSprayBakes = [];
   for (const layer of Object.values(committedLayers)) layer.context.clearRect(0, 0, width(), height());
   for (const operation of operations) drawOperation(operation, committedLayers);
   committedCacheDirty = false;
 }
 
 /**
- * DRAWING LATENCY V1 -- the live, in-progress Mop/Spray gesture's own
- * incremental preview. `resolveSprayEmissionPoints`/`resolveSprayCorePlan`/
- * `resolveSprayParticlePlan`/`resolveMopDabPlan` are all already proven
- * (LIVE STROKE STABILITY V1/V2) to depend only on LOCAL, segment-to-
- * segment context -- never on the array's own total length/count beyond
- * the emission-count ceiling -- so calling them on a bounded trailing
- * WINDOW of `activePoints` (one point of overlap with whatever was
- * already baked, for correct segment continuity at the seam) produces the
- * same local deposition a full from-scratch call would, without re-
- * walking and re-painting everything already baked this gesture. The
- * window is painted onto `livePreviewCanvas`, which is never cleared
- * mid-gesture -- each call only adds the NEWLY arrived material, never
- * regenerates the whole gesture-so-far.
+ * DRAWING LATENCY V1 -- the live, in-progress Mop gesture's own
+ * incremental preview. `resolveMopDabPlan` is already proven (LIVE STROKE
+ * STABILITY V1/V2) to depend only on LOCAL, segment-to-segment context --
+ * never on the array's own total length/count beyond the emission-count
+ * ceiling -- so calling it on a bounded trailing WINDOW of `activePoints`
+ * (one point of overlap with whatever was already baked, for correct
+ * segment continuity at the seam) produces the same local deposition a
+ * full from-scratch call would, without re-walking and re-painting
+ * everything already baked this gesture. The window is painted onto
+ * `livePreviewCanvas`, which is never cleared mid-gesture -- each call
+ * only adds the NEWLY arrived material, never regenerates the whole
+ * gesture-so-far.
  *
- * This is explicitly an INTERACTION representation, not the canonical
- * Mark: each window reuses this gesture's own stable seed (`operation.id`,
- * via `activeOperation`), so core-pass jitter stays continuous across
- * window boundaries (a pass's jitter is drawn once per call, first thing,
- * from a fixed seed -- identical every window), while the particle
- * field's own per-particle PRNG stream restarts at each window boundary --
- * a cosmetic difference from the single continuous stream the canonical
- * full-array computation uses, bounded to this transient preview only.
- * `pointerup` never uses any of this: it calls the unmodified, unwindowed
- * generators on the complete, final `activePoints`, exactly as before
- * this batch, and bakes THAT canonical result into `committedLayers` --
- * see the `pointerup` handler for where the live preview is discarded and
- * replaced, in the same synchronous `render()` call, with zero gap.
- *
- * SPRAY LIVE PREVIEW PERFORMANCE V1 -- passes `"livePreview"` to
- * `drawOperation` so Spray's own particle paint uses the cheaper flat-fill
- * primitive (strokeSmoothing.ts's `fillSprayParticleFlat`) instead of a
- * `createRadialGradient` per particle -- recon found this the dominant
- * cost of Spray's own per-window paint, well above Mop's. Mop reads
- * `renderMode` not at all (its own `drawOperation` branch never touches
- * it), so this has zero effect on Mop. The deposition plan (particle
- * count/position/alpha, core passes) is completely unaffected either way.
+ * SPRAY POINTER-UP RECONCILIATION V1 -- Spray's own live preview no
+ * longer shares this windowed approach (see `advanceSprayLivePreview`
+ * below) -- recon found the windowed particle field's own per-window PRNG
+ * restart (plus the 1-point overlap's double emission) was producing a
+ * live-accumulated particle set measurably denser (~19.3% on a
+ * representative stroke) than the canonical single-stream computation,
+ * which is exactly what made pointer-up's swap to canonical visibly
+ * "redefine" the stroke on top of the (separately fixed) blocking paint
+ * cost. Mop has no such divergence (it never restarts anything --
+ * `resolveMopDabPlan` has no PRNG at all) and this batch's own scope is
+ * Spray-only, so Mop's own preview is untouched here.
  */
 function advanceLivePreview(): void {
   if (activeSupply !== "mop" && activeSupply !== "spray") return;
   if (activePoints.length <= liveBakedPointCount) return;
+  if (activeSupply === "spray") {
+    advanceSprayLivePreview();
+    return;
+  }
   const windowStart = Math.max(0, liveBakedPointCount - 1);
   const windowPoints = activePoints.slice(windowStart);
   liveBakedPointCount = activePoints.length;
   if (windowPoints.length < 2) return;
   drawOperation({ ...activeOperation(activePoints), points: windowPoints }, livePreviewLayers, "livePreview");
+}
+
+/** Converts the gesture's own authored `activePoints` into the screen-space points `drawOperation`'s own Spray branch feeds `strokeSpray` -- the exact same `docToScreen` + tMs/pressure-carry mapping, kept in sync by being the one shared helper both paths now call. */
+function activeSprayScreenPoints(): readonly { readonly x: number; readonly y: number; readonly tMs?: number; readonly pressure?: number }[] {
+  return activePoints.map((p) => ({ ...docToScreen(p), tMs: p.tMs, pressure: p.pressure }));
+}
+
+/**
+ * SPRAY POINTER-UP RECONCILIATION V1 -- replaces the windowed-restart
+ * particle field with an incremental, cursor-based one that shares a
+ * SINGLE continuous deterministic deposition authority with pointer-up's
+ * own canonical finalize (`beginSprayCanonicalBake`), instead of each live
+ * window and the eventual canonical bake independently resolving their
+ * own particle sets. `sprayEmissionCursor`/`sprayParticleCursor` are
+ * threaded through `advanceSprayEmissionPoints`/`advanceSprayParticles`
+ * with the FULL, growing `activePoints` every call (never a slice) --
+ * each resumes exactly where the previous call left off (same seeded PRNG
+ * state, same emission walk), so only the segments/particles implied by
+ * points captured since the LAST call are ever computed, keeping this
+ * exactly as cheap per frame as the windowed approach it replaces, while
+ * producing a particle set that is byte-identical (mod the one-time tail
+ * flare `beginSprayCanonicalBake` alone adds) to what a single canonical
+ * `resolveSprayParticlePlan` call over the same points would produce.
+ * Only the newly-added particles are painted (flat fill, the primitive
+ * 1003C already proved sufficiently cheap for live use) onto the never-
+ * cleared `livePreviewCanvas` -- O(new particles), never O(total
+ * particles). Core passes are resolved and painted exactly as before this
+ * batch -- same per-window slice, routed through the SAME `strokeSpray`
+ * core-pass logic every canonical caller already uses (via its own
+ * `particles: []` override, so strokeSpray paints core passes only, never
+ * re-resolving or re-painting the particle field itself) -- nothing about
+ * core-pass behavior changes here.
+ */
+function advanceSprayLivePreview(): void {
+  const operation = activeOperation(activePoints);
+  if (operation.operation !== "spray") return;
+  const cap = resolveSprayCapProfile(operation.capId);
+  const scaledStyle = { ...operation.style, width: operation.style.width * widthScale() };
+  const baseRadius = scaledStyle.width * 0.5;
+  const screenPoints = activeSprayScreenPoints();
+
+  const windowStart = Math.max(0, liveBakedPointCount - 1);
+  const windowScreenPoints = screenPoints.slice(windowStart);
+  liveBakedPointCount = activePoints.length;
+  if (windowScreenPoints.length >= 2) {
+    strokeSpray(livePreviewLayers.spray.context, windowScreenPoints, scaledStyle, operation.id, cap, { particles: [] });
+  }
+
+  const previousParticleCount = sprayParticleCursor?.particles.length ?? 0;
+  sprayEmissionCursor = advanceSprayEmissionPoints(sprayEmissionCursor, screenPoints, baseRadius, cap);
+  sprayParticleCursor = advanceSprayParticles(sprayParticleCursor, hashSeed(operation.id), sprayEmissionCursor, baseRadius, cap);
+  const addedParticles = sprayParticleCursor.particles.slice(previousParticleCount);
+  if (addedParticles.length === 0) return;
+  const liveCtx = livePreviewLayers.spray.context;
+  liveCtx.save();
+  liveCtx.globalCompositeOperation = "source-over";
+  paintSprayParticles(liveCtx, addedParticles, scaledStyle.color, scaledStyle.opacity, "flat");
+  liveCtx.restore();
 }
 
 /** The one shared supply->material mapping `drawOperation` and `render` both need -- never duplicated. Eraser targets graphite only. */
@@ -520,6 +659,8 @@ function render(): void {
     lastCameraSignature = cameraSignature;
     committedCacheDirty = true;
     liveBakedPointCount = 0;
+    sprayEmissionCursor = null;
+    sprayParticleCursor = null;
     livePreviewContext.clearRect(0, 0, width(), height());
   }
   rebuildCommittedCacheIfNeeded();
@@ -539,11 +680,21 @@ function render(): void {
   for (const materialId of MATERIAL_DRAW_ORDER) {
     if (materialId !== activeMaterialId) {
       ctx.drawImage(committedLayers[materialId].canvas, 0, 0, width(), height());
+      // SPRAY POINTER-UP RECONCILIATION V1 -- a just-lifted Spray stroke
+      // whose canonical gradient bake hasn't finished yet still needs to
+      // be VISIBLE (its own `pendingCanvas`, layered on top of the
+      // committed cache it isn't part of yet) even when nothing is
+      // actively being drawn this frame (`activeMaterialId` is null
+      // between gestures). Every pending bake's own `pendingCanvas` holds
+      // exactly the pixels the live preview already showed -- compositing
+      // it here is never a new paint, only a cheap `drawImage` repeat.
+      if (materialId === "spray") for (const bake of pendingSprayBakes) ctx.drawImage(bake.pendingCanvas, 0, 0, width(), height());
       continue;
     }
     const layer = materialLayers[materialId];
     layer.context.clearRect(0, 0, width(), height());
     layer.context.drawImage(committedLayers[materialId].canvas, 0, 0, width(), height());
+    if (materialId === "spray") for (const bake of pendingSprayBakes) layer.context.drawImage(bake.pendingCanvas, 0, 0, width(), height());
     if (activeSupply === "mop" || activeSupply === "spray") {
       advanceLivePreview();
       layer.context.drawImage(livePreviewCanvas, 0, 0, width(), height());
@@ -1158,6 +1309,130 @@ canvas.addEventListener("pointermove", (event) => {
   }
   scheduleRender();
 });
+/**
+ * SPRAY POINTER-UP RECONCILIATION V1 -- replaces, for Spray only, the
+ * single synchronous `drawOperation(operation, committedLayers)` call
+ * pointer-up used to make. Recon measured that call's own canonical
+ * particle paint (`createRadialGradient` x 18K-26K, in one blocking burst)
+ * as the entire source of the reported ~5s pointer-up stall -- never
+ * persistence, which remains fire-and-forget and unaffected by any of
+ * this. Called synchronously from pointerup, AFTER `operations.push`,
+ * BEFORE `activePoints`/the live cursors are reset -- the one place this
+ * gesture's own incremental `sprayEmissionCursor`/`sprayParticleCursor`
+ * are read before they're cleared for the next gesture.
+ *
+ * What makes this non-blocking without lowering `maxEmissionPoints` or
+ * touching deposition behavior: the FINAL particle list is resolved here
+ * (cheap -- `finalizeSprayParticles` only catches the cursor up on
+ * whatever tail of points the live preview hadn't yet reached, then adds
+ * the one-time tail flare), but PAINTING it with the real canonical
+ * soft-gradient fill is deferred to `runSprayBakeFrame`'s bounded,
+ * multi-frame chunks. In the meantime, `pendingCanvas` -- a COPY of
+ * exactly the live-preview pixels already on screen, never a repaint --
+ * is what `render()` shows in this stroke's place, so pointer-up itself
+ * changes nothing visible; only once the background bake finishes does
+ * the softer canonical fill quietly replace the flat one, at the same
+ * particle positions.
+ */
+function beginSprayCanonicalBake(operation: BlackbookStroke): void {
+  const cap = resolveSprayCapProfile(operation.capId);
+  const scaledStyle = { ...operation.style, width: operation.style.width * widthScale() };
+  const baseRadius = scaledStyle.width * 0.5;
+  const screenPoints = activeSprayScreenPoints();
+  const finalEmissionCursor = advanceSprayEmissionPoints(sprayEmissionCursor, screenPoints, baseRadius, cap);
+  const particles = finalizeSprayParticles(sprayParticleCursor, hashSeed(operation.id), finalEmissionCursor, baseRadius, cap);
+
+  const pendingCanvas = document.createElement("canvas");
+  pendingCanvas.width = livePreviewCanvas.width;
+  pendingCanvas.height = livePreviewCanvas.height;
+  const pendingContext = required(pendingCanvas.getContext("2d"), "blackbook_material_canvas_unavailable");
+  if (sprayEmissionCursor) {
+    // The common case (any gesture lasting more than one animation frame,
+    // i.e. virtually every real drag): the artist's eye was already on
+    // exactly these pixels a moment ago -- copying them is cheaper than,
+    // and pixel-identical to, repainting.
+    pendingContext.drawImage(livePreviewCanvas, 0, 0);
+  } else {
+    // Rare edge case: a gesture so brief no render() ever ran between its
+    // pointerdown and this pointerup, so `livePreviewCanvas` never
+    // received a single live-preview frame for it (still showing
+    // whatever the PREVIOUS gesture left on it, already cleared, or
+    // blank). Fall back to one flat-filled paint of the SAME final
+    // particles/core passes this bake will later repaint with gradient
+    // fill -- the identical bounded primitive 1003C already proved cheap
+    // enough for live use, just run once for the whole (necessarily
+    // short -- no frame had time to fire) gesture instead of per-window.
+    strokeSpray(pendingContext, screenPoints, scaledStyle, operation.id, cap, { particles, particleRendering: "flat" });
+  }
+
+  const bakeCanvas = document.createElement("canvas");
+  bakeCanvas.width = livePreviewCanvas.width;
+  bakeCanvas.height = livePreviewCanvas.height;
+  const bakeContext = required(bakeCanvas.getContext("2d"), "blackbook_material_canvas_unavailable");
+
+  pendingSprayBakes.push({
+    operationId: operation.id,
+    pendingCanvas,
+    bakeCanvas,
+    bakeContext,
+    screenPoints,
+    scaledStyle,
+    cap,
+    particles,
+    corePassesPainted: false,
+    nextParticleIndex: 0,
+  });
+  scheduleSprayBakeFrame();
+}
+
+/**
+ * SPRAY POINTER-UP RECONCILIATION V1 -- paints at most
+ * `SPRAY_BAKE_FRAME_BUDGET_MS` worth of one pending bake's canonical
+ * (soft-gradient) particles into its own blank `bakeCanvas`, resuming
+ * across as many animation frames as the real on-device per-particle
+ * paint cost (never measured synthetically -- see this batch's own recon)
+ * turns out to need. Core passes are painted once, via the SAME
+ * `strokeSpray` core-pass logic every other caller uses (`particles: []`
+ * suppresses its own particle paint, since particles are this function's
+ * own job, chunked). Processes `pendingSprayBakes` strictly FIFO -- the
+ * oldest queued bake (the one that would otherwise block the longest)
+ * always finishes first, and merging it into `committedLayers.spray`
+ * (one `drawImage`, replacing that bake's own `pendingCanvas` contribution
+ * with its now-complete canonical one) never reorders anything relative
+ * to `operations`' own append order.
+ */
+function runSprayBakeFrame(): void {
+  sprayBakeFrameScheduled = false;
+  const bake = pendingSprayBakes[0];
+  if (!bake) return;
+  if (!bake.corePassesPainted) {
+    strokeSpray(bake.bakeContext, bake.screenPoints, bake.scaledStyle, bake.operationId, bake.cap, { particles: [] });
+    bake.corePassesPainted = true;
+  }
+  const deadline = performance.now() + SPRAY_BAKE_FRAME_BUDGET_MS;
+  bake.bakeContext.save();
+  bake.bakeContext.globalCompositeOperation = "source-over";
+  while (bake.nextParticleIndex < bake.particles.length) {
+    const nextIndex = Math.min(bake.particles.length, bake.nextParticleIndex + SPRAY_BAKE_CHECK_INTERVAL);
+    paintSprayParticles(bake.bakeContext, bake.particles.slice(bake.nextParticleIndex, nextIndex), bake.scaledStyle.color, bake.scaledStyle.opacity, "gradient");
+    bake.nextParticleIndex = nextIndex;
+    if (performance.now() >= deadline) break;
+  }
+  bake.bakeContext.restore();
+  if (bake.nextParticleIndex >= bake.particles.length) {
+    committedLayers.spray.context.drawImage(bake.bakeCanvas, 0, 0);
+    pendingSprayBakes.shift();
+    scheduleRender();
+  }
+  if (pendingSprayBakes.length > 0) scheduleSprayBakeFrame();
+}
+
+function scheduleSprayBakeFrame(): void {
+  if (sprayBakeFrameScheduled) return;
+  sprayBakeFrameScheduled = true;
+  requestAnimationFrame(runSprayBakeFrame);
+}
+
 canvas.addEventListener("pointerup", (event) => {
   if (!canvas.hasPointerCapture(event.pointerId)) return;
   canvas.releasePointerCapture(event.pointerId);
@@ -1169,15 +1444,23 @@ canvas.addEventListener("pointerup", (event) => {
     // of the reported mouse-up reshuffle.
     const operation = activeOperation(activePoints);
     operations.push(operation);
-    // DRAWING LATENCY V1 -- bakes this ONE just-committed Mark into the
-    // cache incrementally (no full-array rebuild needed for the common
-    // single-commit path) by calling the exact same, unmodified
-    // `drawOperation` on the COMPLETE, final `activePoints` -- the
-    // canonical computation, never the live preview's windowed
-    // approximation. `render()` (below) then draws this cached result in
-    // place of the discarded live-preview layer within the same
-    // synchronous call -- no intermediate frame, no visible gap.
-    drawOperation(operation, committedLayers);
+    if (operation.operation === "spray") {
+      // SPRAY POINTER-UP RECONCILIATION V1 -- see beginSprayCanonicalBake's
+      // own doc. Replaces the single blocking canonical paint with a
+      // non-blocking, visually-stable hand-off; every other supply below
+      // keeps the exact synchronous path it already had.
+      beginSprayCanonicalBake(operation);
+    } else {
+      // DRAWING LATENCY V1 -- bakes this ONE just-committed Mark into the
+      // cache incrementally (no full-array rebuild needed for the common
+      // single-commit path) by calling the exact same, unmodified
+      // `drawOperation` on the COMPLETE, final `activePoints` -- the
+      // canonical computation, never the live preview's windowed
+      // approximation. `render()` (below) then draws this cached result in
+      // place of the discarded live-preview layer within the same
+      // synchronous call -- no intermediate frame, no visible gap.
+      drawOperation(operation, committedLayers);
+    }
     // BLACKBOOK Deterministic Drips β0.1 -- generated and pushed
     // synchronously, immediately after the origin (see
     // createDripOperationsFor's own doc for why this must happen here,
@@ -1201,6 +1484,13 @@ canvas.addEventListener("pointerup", (event) => {
   }
   activeOperationId = null;
   activePoints = [];
+  // SPRAY POINTER-UP RECONCILIATION V1 -- this gesture is fully
+  // reconciled now (baked directly, non-Spray; or handed off to
+  // beginSprayCanonicalBake, which already read everything it needed) --
+  // the next gesture (Spray or not) must never inherit this one's PRNG
+  // stream/emission history.
+  sprayEmissionCursor = null;
+  sprayParticleCursor = null;
   renderNow();
 });
 
