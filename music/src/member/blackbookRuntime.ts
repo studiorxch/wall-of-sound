@@ -228,10 +228,43 @@ function fitPageIntoView(): void {
   cameraView.fitToRect(pageFrameRect(), width(), height(), 0.6, MIN_ZOOM, MAX_ZOOM);
 }
 
-const materialLayers = Object.fromEntries(["graphite", "ink", "marker", "mop", "spray"].map((materialId) => {
-  const layer = document.createElement("canvas");
-  return [materialId, { canvas: layer, context: required(layer.getContext("2d"), "blackbook_material_canvas_unavailable") }];
-})) as Record<"graphite" | "ink" | "marker" | "mop" | "spray", { canvas: HTMLCanvasElement; context: CanvasRenderingContext2D }>;
+type MaterialLayerId = "graphite" | "ink" | "marker" | "mop" | "spray";
+type MaterialLayerSet = Record<MaterialLayerId, { canvas: HTMLCanvasElement; context: CanvasRenderingContext2D }>;
+
+function createMaterialLayerSet(): MaterialLayerSet {
+  return Object.fromEntries(["graphite", "ink", "marker", "mop", "spray"].map((materialId) => {
+    const layer = document.createElement("canvas");
+    return [materialId, { canvas: layer, context: required(layer.getContext("2d"), "blackbook_material_canvas_unavailable") }];
+  })) as MaterialLayerSet;
+}
+
+const materialLayers = createMaterialLayerSet();
+/**
+ * DRAWING LATENCY V1 -- `materialLayers` composites onto the visible canvas
+ * every `render()` call; `committedLayers` is the same five-canvas shape
+ * holding only COMMITTED (already pushed to `operations`) Marks' already-
+ * rendered pixels. `render()` blits this (cheap) instead of re-running
+ * every committed Mop/Spray Mark's deterministic deposition from scratch
+ * on every `pointermove` -- see `rebuildCommittedCacheIfNeeded`'s own doc.
+ * The deterministic generators themselves, and what gets PERSISTED, are
+ * completely unaffected: this cache only ever holds the RESULT of calling
+ * the same unchanged `drawOperation` this file always used.
+ */
+const committedLayers = createMaterialLayerSet();
+/**
+ * DRAWING LATENCY V1 -- one shared scratch canvas for the CURRENTLY ACTIVE
+ * gesture's own incremental live preview (Mop/Spray only -- see
+ * `advanceLivePreview`'s own doc). Only one gesture can ever be active at
+ * once, so "mop" and "spray" safely alias the same canvas/context; this is
+ * never persisted and never read by anything other than `render()`.
+ */
+const livePreviewCanvas = document.createElement("canvas");
+const livePreviewContext = required(livePreviewCanvas.getContext("2d"), "blackbook_material_canvas_unavailable");
+const livePreviewLayers: MaterialLayerSet = {
+  graphite: materialLayers.graphite, ink: materialLayers.ink, marker: materialLayers.marker,
+  mop: { canvas: livePreviewCanvas, context: livePreviewContext },
+  spray: { canvas: livePreviewCanvas, context: livePreviewContext },
+};
 
 /** Keeps the visible canvas and every material layer's backing store in sync with the element's live CSS size (DPR-aware) -- mirrors blankCanvasRuntime.ts's `resizeCanvas`. Never re-frames the camera: an existing view must survive a viewport resize unchanged (requirement 2). */
 function resizeCanvasesToDisplaySize(): void {
@@ -241,14 +274,41 @@ function resizeCanvasesToDisplaySize(): void {
   canvas.width = Math.round(cssWidth * dpr);
   canvas.height = Math.round(cssHeight * dpr);
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  for (const layer of Object.values(materialLayers)) {
+  for (const layer of [...Object.values(materialLayers), ...Object.values(committedLayers), { canvas: livePreviewCanvas, context: livePreviewContext }]) {
     layer.canvas.width = Math.round(cssWidth * dpr);
     layer.canvas.height = Math.round(cssHeight * dpr);
     layer.context.setTransform(dpr, 0, 0, dpr, 0, 0);
   }
+  // DRAWING LATENCY V1 -- resizing a canvas element clears its own pixels
+  // (a platform behavior, not something this file controls), so whatever
+  // the committed cache/live preview held is now stale regardless of
+  // camera state -- see render()'s own camera-signature check for the
+  // general case; this covers the resize-without-a-camera-change case
+  // explicitly (e.g. the PAGES drawer's own width transition).
+  committedCacheDirty = true;
+  liveBakedPointCount = 0;
 }
 
 let operations: BlackbookOperation[] = [];
+/**
+ * DRAWING LATENCY V1 -- true whenever `committedLayers` no longer
+ * reflects `operations` and must be fully rebuilt before the next
+ * `render()` composites it (see `rebuildCommittedCacheIfNeeded`). Set
+ * explicitly at every place `operations` is replaced/spliced other than
+ * the single-committed-Mark append path (which updates `committedLayers`
+ * incrementally instead -- see the `pointerup` handler) -- Undo, CLEAR,
+ * CLEAR-undo, Pages/artwork switching, sign-out, and canvas resize.
+ * Starts `true` so the very first `render()` populates the cache.
+ */
+let committedCacheDirty = true;
+/**
+ * DRAWING LATENCY V1 -- how many of the CURRENT gesture's own
+ * `activePoints` have already been baked into `livePreviewCanvas`. Reset
+ * to 0 (with the canvas cleared) at `pointerdown` and whenever the camera
+ * (pan/zoom/viewport size) changes mid-gesture -- see `advanceLivePreview`.
+ */
+let liveBakedPointCount = 0;
+let lastCameraSignature: string | null = null;
 /**
  * BLACKBOOK CLEAR + Single-Step Undo V1 -- set the instant CLEAR runs,
  * holding the pre-clear `operations` so exactly one UNDO can restore all
@@ -359,11 +419,104 @@ function renderArtboardOutline(): void {
   ctx.restore();
 }
 
+/**
+ * DRAWING LATENCY V1 -- `docToScreen`'s projection depends on the camera's
+ * pan/zoom and the viewport's own size; a cached raster is only valid for
+ * the exact camera/size it was painted under. Rather than hunt down every
+ * individual pan/zoom/resize call site, `render()` itself compares this
+ * signature every call -- panning and drawing are already mutually
+ * exclusive (`panMode`), so this never fires mid-gesture for the common
+ * "actively dragging Mop/Spray" case this batch exists to fix; it only
+ * (correctly, infrequently) forces a full rebuild on an actual camera/size
+ * change, exactly matching today's existing per-frame replay cost for
+ * that already-rare case -- never worse than before this batch.
+ */
+function currentCameraSignature(): string {
+  const state = cameraView.getState();
+  return `${state.panX}|${state.panY}|${state.zoom}|${width()}|${height()}`;
+}
+
+/**
+ * DRAWING LATENCY V1 -- replays every committed operation into
+ * `committedLayers` exactly once (never per-frame) whenever something
+ * other than a single fresh commit changed the Mark set or the camera/
+ * viewport invalidated the cached raster. Uses the exact same
+ * `drawOperation` (and therefore the exact same deterministic
+ * `strokeMop`/`strokeSpray`/etc.) every other render path already used --
+ * this changes WHEN that work happens, never WHAT it computes.
+ */
+function rebuildCommittedCacheIfNeeded(): void {
+  if (!committedCacheDirty) return;
+  for (const layer of Object.values(committedLayers)) layer.context.clearRect(0, 0, width(), height());
+  for (const operation of operations) drawOperation(operation, committedLayers);
+  committedCacheDirty = false;
+}
+
+/**
+ * DRAWING LATENCY V1 -- the live, in-progress Mop/Spray gesture's own
+ * incremental preview. `resolveSprayEmissionPoints`/`resolveSprayCorePlan`/
+ * `resolveSprayParticlePlan`/`resolveMopDabPlan` are all already proven
+ * (LIVE STROKE STABILITY V1/V2) to depend only on LOCAL, segment-to-
+ * segment context -- never on the array's own total length/count beyond
+ * the emission-count ceiling -- so calling them on a bounded trailing
+ * WINDOW of `activePoints` (one point of overlap with whatever was
+ * already baked, for correct segment continuity at the seam) produces the
+ * same local deposition a full from-scratch call would, without re-
+ * walking and re-painting everything already baked this gesture. The
+ * window is painted onto `livePreviewCanvas`, which is never cleared
+ * mid-gesture -- each call only adds the NEWLY arrived material, never
+ * regenerates the whole gesture-so-far.
+ *
+ * This is explicitly an INTERACTION representation, not the canonical
+ * Mark: each window reuses this gesture's own stable seed (`operation.id`,
+ * via `activeOperation`), so core-pass jitter stays continuous across
+ * window boundaries (a pass's jitter is drawn once per call, first thing,
+ * from a fixed seed -- identical every window), while the particle
+ * field's own per-particle PRNG stream restarts at each window boundary --
+ * a cosmetic difference from the single continuous stream the canonical
+ * full-array computation uses, bounded to this transient preview only.
+ * `pointerup` never uses any of this: it calls the unmodified, unwindowed
+ * generators on the complete, final `activePoints`, exactly as before
+ * this batch, and bakes THAT canonical result into `committedLayers` --
+ * see the `pointerup` handler for where the live preview is discarded and
+ * replaced, in the same synchronous `render()` call, with zero gap.
+ */
+function advanceLivePreview(): void {
+  if (activeSupply !== "mop" && activeSupply !== "spray") return;
+  if (activePoints.length <= liveBakedPointCount) return;
+  const windowStart = Math.max(0, liveBakedPointCount - 1);
+  const windowPoints = activePoints.slice(windowStart);
+  liveBakedPointCount = activePoints.length;
+  if (windowPoints.length < 2) return;
+  drawOperation({ ...activeOperation(activePoints), points: windowPoints }, livePreviewLayers);
+}
+
 function render(): void {
   renderWorkspace();
+  const cameraSignature = currentCameraSignature();
+  if (cameraSignature !== lastCameraSignature) {
+    lastCameraSignature = cameraSignature;
+    committedCacheDirty = true;
+    liveBakedPointCount = 0;
+    livePreviewContext.clearRect(0, 0, width(), height());
+  }
+  rebuildCommittedCacheIfNeeded();
   for (const layer of Object.values(materialLayers)) layer.context.clearRect(0, 0, width(), height());
-  for (const operation of operations) drawOperation(operation);
-  if (activePoints.length > 1) drawOperation(activeOperation(activePoints));
+  for (const materialId of Object.keys(materialLayers) as MaterialLayerId[]) {
+    materialLayers[materialId].context.drawImage(committedLayers[materialId].canvas, 0, 0, width(), height());
+  }
+  if (activePoints.length > 1) {
+    if (activeSupply === "mop" || activeSupply === "spray") {
+      advanceLivePreview();
+      materialLayers[activeSupply].context.drawImage(livePreviewCanvas, 0, 0, width(), height());
+    } else {
+      // Pencil/Pen/Marker/Eraser's own `drawOperation` cost is cheap
+      // (quadratic-smoothed path + one stroke(), no particle/dab
+      // generation) -- replaying it fresh every frame was never the
+      // latency problem this batch exists to fix, so it stays unchanged.
+      drawOperation(activeOperation(activePoints));
+    }
+  }
   ctx.drawImage(materialLayers.graphite.canvas, 0, 0, width(), height());
   ctx.drawImage(materialLayers.mop.canvas, 0, 0, width(), height());
   ctx.drawImage(materialLayers.spray.canvas, 0, 0, width(), height());
@@ -411,7 +564,15 @@ function path(context: CanvasRenderingContext2D, points: readonly { x: number; y
 }
 
 
-function drawOperation(operation: BlackbookOperation): void {
+/**
+ * DRAWING LATENCY V1 -- `layers` lets callers target `materialLayers`
+ * (the default -- the live visible-canvas-bound path, unchanged), the
+ * cached `committedLayers` (cache rebuild/append), or the ephemeral
+ * `livePreviewLayers` (the active gesture's own windowed preview). The
+ * deterministic rendering math inside this function is completely
+ * unaffected either way -- only WHICH canvas receives the result changes.
+ */
+function drawOperation(operation: BlackbookOperation, layers: MaterialLayerSet = materialLayers): void {
   const { points } = operation;
   if (points.length < 2) return;
   // BLACKBOOK Deterministic Drips β0.1 -- a drip renders on its OWN target
@@ -421,7 +582,7 @@ function drawOperation(operation: BlackbookOperation): void {
   // already-persisted/already-generated points (strokeMaterialDrip derives
   // taper purely from point index) -- no re-simulation happens here.
   if (operation.operation === "material-drip") {
-    const dripCtx = materialLayers[operation.targetMaterialId].context;
+    const dripCtx = layers[operation.targetMaterialId].context;
     dripCtx.save();
     const scaledStyle = { ...operation.style, width: operation.style.width * widthScale() };
     strokeMaterialDrip(dripCtx, points.map((point) => docToScreen(point)), scaledStyle, operation.targetMaterialId);
@@ -434,7 +595,7 @@ function drawOperation(operation: BlackbookOperation): void {
     : operation.operation === "mop" ? "mop"
     : operation.operation === "spray" ? "spray"
     : "graphite"; // eraser targets graphite only
-  const materialCtx = materialLayers[materialId].context;
+  const materialCtx = layers[materialId].context;
   if (operation.operation === "mop") {
     materialCtx.save();
     const scaledStyle = { ...operation.style, width: operation.style.width * widthScale() };
@@ -790,6 +951,10 @@ function applyActiveArtwork(): void {
   const target = currentArtwork.getState();
   const active = target.kind === "artwork" ? knownArtworksCache.find((artwork) => artwork.id === target.artworkId) ?? null : null;
   operations = active ? marksToOperations(active) : [];
+  // DRAWING LATENCY V1 -- the committed Mark SET just changed wholesale
+  // (a different Artwork's own Marks, or none) -- never assume the
+  // camera/viewport check in render() alone will catch this.
+  committedCacheDirty = true;
   activePageFrame = active?.pageFrame ?? BLACKBOOK_PAGE_FRAME;
   fitPageIntoView();
   render();
@@ -866,6 +1031,12 @@ canvas.addEventListener("pointerdown", (event) => {
   // never differ in seed. See activeOperationId's own doc.
   activeOperationId = `blackbook-operation-${nextOperationId++}`;
   activePoints = [point(event)];
+  // DRAWING LATENCY V1 -- a fresh gesture starts its own live-preview
+  // accumulation from scratch (never reusing the PREVIOUS gesture's baked
+  // pixels, even though the canvas object is shared -- see
+  // livePreviewLayers' own doc).
+  liveBakedPointCount = 0;
+  livePreviewContext.clearRect(0, 0, width(), height());
   render();
 });
 canvas.addEventListener("pointermove", (event) => {
@@ -924,13 +1095,25 @@ canvas.addEventListener("pointerup", (event) => {
     // of the reported mouse-up reshuffle.
     const operation = activeOperation(activePoints);
     operations.push(operation);
+    // DRAWING LATENCY V1 -- bakes this ONE just-committed Mark into the
+    // cache incrementally (no full-array rebuild needed for the common
+    // single-commit path) by calling the exact same, unmodified
+    // `drawOperation` on the COMPLETE, final `activePoints` -- the
+    // canonical computation, never the live preview's windowed
+    // approximation. `render()` (below) then draws this cached result in
+    // place of the discarded live-preview layer within the same
+    // synchronous call -- no intermediate frame, no visible gap.
+    drawOperation(operation, committedLayers);
     // BLACKBOOK Deterministic Drips β0.1 -- generated and pushed
     // synchronously, immediately after the origin (see
     // createDripOperationsFor's own doc for why this must happen here,
     // before any persistence call, and why that keeps the two always
     // contiguous in `operations`).
     const dripOperations = createDripOperationsFor(operation);
-    for (const dripOperation of dripOperations) operations.push(dripOperation);
+    for (const dripOperation of dripOperations) {
+      operations.push(dripOperation);
+      drawOperation(dripOperation, committedLayers);
+    }
     // BLACKBOOK CLEAR + Single-Step Undo V1 -- a newly committed stroke
     // means CLEAR is no longer "the last action" -- its own one-shot Undo
     // is no longer available (same single-level semantics as an ordinary
@@ -951,6 +1134,7 @@ undoButton.addEventListener("click", () => {
   if (lastClearSnapshot !== null) {
     const restored = lastClearSnapshot;
     operations = [...restored];
+    committedCacheDirty = true; // DRAWING LATENCY V1 -- Mark set changed wholesale
     lastClearSnapshot = null;
     render();
     const target = currentArtwork.getState();
@@ -969,6 +1153,7 @@ undoButton.addEventListener("click", () => {
   // as before this build.
   const removedGesture = popLastGesture();
   if (removedGesture.length === 0) return;
+  committedCacheDirty = true; // DRAWING LATENCY V1 -- Mark set changed wholesale
   render();
   showStatus("Saving…", "info");
   void Promise.all(removedGesture.map((operation) => persistence.removeStroke(operation)))
@@ -994,6 +1179,7 @@ function clearArtwork(): void {
   const target = currentArtwork.getState();
   const previous = operations;
   operations = [];
+  committedCacheDirty = true; // DRAWING LATENCY V1 -- Mark set changed wholesale
   lastClearSnapshot = previous;
   render();
   if (target.kind !== "artwork") return; // nothing persisted yet to clear (defensive -- operations.length>0 already implies a real Artwork exists)
@@ -1030,6 +1216,7 @@ fitButton.addEventListener("click", () => {
 function startNewPage(): void {
   if (memberState.status !== "signedIn") return;
   operations = [];
+  committedCacheDirty = true; // DRAWING LATENCY V1 -- Mark set changed wholesale
   activePoints = [];
   lastClearSnapshot = null;
   currentArtwork.setPendingNewArtwork("map", "");
@@ -1374,6 +1561,7 @@ memberIdentity.subscribe((state) => {
   } else {
     showStatus("Private page — sign in to draw", "info");
     operations = [];
+    committedCacheDirty = true; // DRAWING LATENCY V1 -- Mark set changed wholesale
     activePageFrame = BLACKBOOK_PAGE_FRAME;
     knownArtworksCache = [];
     currentArtwork.clear();
