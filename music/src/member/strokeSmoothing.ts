@@ -20,7 +20,7 @@
  */
 
 import { hashSeed, resolveSprayCorePlan, resolveSprayParticlePlan, STUDIORICH_STOCK_CAP, type SprayCapProfile, type SprayParticle } from "./sprayDeposition";
-import { resolveMopDabPlan } from "./mopDeposition";
+import { resolveMopDabPlan, type MopDab } from "./mopDeposition";
 
 export interface SmoothablePoint {
   readonly x: number;
@@ -551,11 +551,29 @@ const MOP_DAB_RADIUS_MAX_SCALE = 1.32;
 const MOP_DAB_ALPHA_BASE = 0.4;
 const MOP_DAB_ALPHA_RANGE = 0.3;
 
+/**
+ * MOP/SPRAY POINTER-UP WYSIWYG V1 -- `dabOrdinalOffset` and `dabs` mirror
+ * `strokeSpray`'s own `particleRendering`/`particles` options exactly:
+ * `dabOrdinalOffset` (default 0 -- byte-identical to every pre-existing
+ * caller) is passed straight through to `resolveMopDabPlan` for a caller
+ * resolving a live-preview WINDOW rather than the complete gesture (see
+ * that function's own doc); `dabs`, when supplied, is painted VERBATIM
+ * instead of calling `resolveMopDabPlan` at all -- for a caller that
+ * already holds an externally-resolved dab list (e.g. one already
+ * counted for `dabOrdinalOffset` bookkeeping) and doesn't need this call
+ * to re-resolve it.
+ */
+export interface StrokeMopOptions {
+  readonly dabOrdinalOffset?: number;
+  readonly dabs?: readonly MopDab[];
+}
+
 export function strokeMop(
   ctx: CanvasRenderingContext2D,
   points: readonly SmoothablePoint[],
   style: { readonly color: string; readonly width: number; readonly opacity: number },
   seedSource: string,
+  options?: StrokeMopOptions,
 ): void {
   if (points.length < 2) return;
   const seed = hashSeed(seedSource);
@@ -577,32 +595,35 @@ export function strokeMop(
 
   // Pass 2: DABS -- deterministic per-dab jitter, seeded by this Mark's
   // own stable id so two different Marks never share one jitter pattern.
-  const dabs = resolveMopDabPlan(points, baseRadius);
-  // Calibration V1 Revision 10 (dot-gesture fix, preserved): a short dab
-  // list (a dot/near-dot gesture) always renders fully centered -- the
-  // inclusion/scatter randomness exists to break up a LONG stroke's
-  // regular rhythm and is actively harmful applied to only 1-3 dabs.
-  const isDotLike = dabs.length <= 3;
-  for (let index = 0; index < dabs.length; index += 1) {
-    const dab = dabs[index];
+  //
+  // MOP/SPRAY POINTER-UP WYSIWYG V1 -- `dab.isDotLike`/`dab.perpX`/
+  // `dab.perpY` are now resolved once, stably, inside `resolveMopDabPlan`
+  // itself (see that function's and `MopEmissionPoint.perpX`'s own docs)
+  // -- never recomputed here from this call's own local `dabs` array
+  // length or index-adjacency. That local recomputation (`dabs.length<=3`,
+  // `dabs[index-1]`/`dabs[index+1]`) was the actual defect: a live-preview
+  // window's own small `dabs` array produced a DIFFERENT isDotLike/
+  // tangent than the SAME dabs got once resolved as part of the complete
+  // gesture, which is what made pointer-up visibly "reveal" scattered,
+  // partially-skipped dabs that read as smooth/centered during live
+  // drawing. The inclusion-probability draw and the lateral OFFSET
+  // MAGNITUDE below were always purely position-based (`hash01`/
+  // `hashLateralUnit` of the dab's own x/y) and therefore already stable
+  // -- only the GATE (`isDotLike`) and the offset DIRECTION (`perpX`/
+  // `perpY`) needed to move off call-local context.
+  const dabs = options?.dabs ?? resolveMopDabPlan(points, baseRadius, options?.dabOrdinalOffset ?? 0);
+  for (const dab of dabs) {
     const dabSeedX = dab.x + seed;
     const dabSeedY = dab.y + seed;
-    if (!isDotLike && hash01(dabSeedX, dabSeedY, 4) > MOP_DAB_INCLUDE_PROBABILITY) continue;
-    const prev = dabs[index - 1] ?? dab;
-    const next = dabs[index + 1] ?? dab;
-    const tangentX = next.x - prev.x;
-    const tangentY = next.y - prev.y;
-    const tangentLength = Math.hypot(tangentX, tangentY) || 1;
-    const perpX = -tangentY / tangentLength;
-    const perpY = tangentX / tangentLength;
-    const lateral = isDotLike ? 0 : hashLateralUnit(dabSeedX, dabSeedY) * baseRadius * MOP_DAB_LATERAL_SCALE;
+    if (!dab.isDotLike && hash01(dabSeedX, dabSeedY, 4) > MOP_DAB_INCLUDE_PROBABILITY) continue;
+    const lateral = dab.isDotLike ? 0 : hashLateralUnit(dabSeedX, dabSeedY) * baseRadius * MOP_DAB_LATERAL_SCALE;
     const radiusScale = MOP_DAB_RADIUS_MIN_SCALE + hash01(dabSeedX, dabSeedY, 1) * (MOP_DAB_RADIUS_MAX_SCALE - MOP_DAB_RADIUS_MIN_SCALE);
     const alphaJitter = MOP_DAB_ALPHA_BASE + hash01(dabSeedX, dabSeedY, 2) * MOP_DAB_ALPHA_RANGE;
     fillMopDab(
       ctx,
       {
-        x: dab.x + perpX * lateral,
-        y: dab.y + perpY * lateral,
+        x: dab.x + dab.perpX * lateral,
+        y: dab.y + dab.perpY * lateral,
         radius: Math.max(0.3, dab.radius * radiusScale),
         alpha: Math.max(0, dab.alphaScale * alphaJitter),
       },

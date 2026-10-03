@@ -18,6 +18,7 @@ import {
   GRAPHITE_PROFILES,
   GRAPHITE_PROFILE_VERSION,
 } from "./strokeSmoothing";
+import { resolveMopDabPlan } from "./mopDeposition";
 
 function fakeStrokeContext() {
   const calls: string[] = [];
@@ -704,6 +705,49 @@ describe("strokeMop -- Mop Material Calibration V1", () => {
     const { ctx } = fakeMopContext();
     expect(() => strokeMop(ctx as never, points, legacyStyle, "legacy-mark")).not.toThrow();
   });
+
+  /**
+   * MOP/SPRAY POINTER-UP WYSIWYG V1 -- `dabs`/`dabOrdinalOffset` mirror
+   * strokeSpray's own `particles` override exactly. These prove the
+   * canonical commit/reload path (no options, resolves internally) and
+   * an externally-resolved dab list (what the live preview, and any
+   * future chunked Mop bake, would supply) paint IDENTICALLY when given
+   * the SAME dabs -- the mechanism `resolveMopDabPlan`'s own equivalence
+   * tests (mopDeposition.test.ts) rely on `strokeMop` to actually use.
+   */
+  describe("dabs/dabOrdinalOffset options -- MOP/SPRAY POINTER-UP WYSIWYG V1", () => {
+    it("an explicit dabs list is painted verbatim, never recomputed from points -- canonical reload derives the identical committed arrangement from the same mechanism", () => {
+      const resolved = resolveMopDabPlan(points, style.width * 0.5);
+      const viaInternalResolve = fakeMopContext();
+      strokeMop(viaInternalResolve.ctx as never, points, style, "mark-a");
+      const viaExplicitDabs = fakeMopContext();
+      strokeMop(viaExplicitDabs.ctx as never, points, style, "mark-a", { dabs: resolved });
+      expect(viaExplicitDabs.calls).toEqual(viaInternalResolve.calls);
+    });
+
+    it("dabOrdinalOffset shifts which dabs are treated as dot-like -- an offset at or past the threshold disables inclusion-skip/lateral-scatter suppression entirely", () => {
+      const shortTap = [{ x: 0, y: 0 }, { x: 4, y: 1 }];
+      const noOffset = fakeMopContext();
+      strokeMop(noOffset.ctx as never, shortTap, style, "mark-a");
+      const withOffset = fakeMopContext();
+      strokeMop(withOffset.ctx as never, shortTap, style, "mark-a", { dabOrdinalOffset: 10 });
+      // With no offset this short gesture is entirely dot-like (every dab
+      // painted dead-center, same as resolveMopDabPlan's own default);
+      // with an offset past the threshold, none of its dabs are dot-like
+      // any more -- a real behavioral difference, proving the parameter
+      // is actually threaded through to resolveMopDabPlan.
+      const arcPositions = (calls: readonly string[]) => calls.filter((call) => call.startsWith("arc(")).map((call) => call.replace(/^arc\(/, ""));
+      expect(arcPositions(withOffset.calls)).not.toEqual(arcPositions(noOffset.calls));
+    });
+
+    it("omitting both options still resolves+paints the full default dab plan, byte-identical to no options at all", () => {
+      const withoutOptions = fakeMopContext();
+      strokeMop(withoutOptions.ctx as never, points, style, "mark-a");
+      const explicitUndefined = fakeMopContext();
+      strokeMop(explicitUndefined.ctx as never, points, style, "mark-a", { dabOrdinalOffset: undefined, dabs: undefined });
+      expect(explicitUndefined.calls).toEqual(withoutOptions.calls);
+    });
+  });
 });
 
 describe("strokeSpray -- Spray Material Calibration V1", () => {
@@ -948,6 +992,14 @@ describe("paintSprayParticles -- SPRAY POINTER-UP RECONCILIATION V1", () => {
     const { calls, ctx } = fakeMopContext();
     paintSprayParticles(ctx as never, [], "#000", 1);
     expect(calls).toEqual([]);
+  });
+
+  it("MOP/SPRAY POINTER-UP WYSIWYG V1 -- repeated flat calls (the exact pattern beginSprayCanonicalBake's catch-up call makes, including a final call with nothing new) never call createRadialGradient -- no synchronous gradient-bake regression from the pointer-up catch-up fix", () => {
+    const fake = fakeMopContext();
+    paintSprayParticles(fake.ctx as never, [{ x: 1, y: 1, radius: 2, alpha: 1 }], "#000", 1, "flat");
+    paintSprayParticles(fake.ctx as never, [{ x: 2, y: 2, radius: 2, alpha: 1 }], "#000", 1, "flat");
+    paintSprayParticles(fake.ctx as never, [], "#000", 1, "flat"); // the "nothing new to catch up" case
+    expect(fake.createRadialGradientCallCount).toBe(0);
   });
 });
 

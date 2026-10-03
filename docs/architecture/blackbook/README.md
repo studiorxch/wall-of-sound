@@ -872,8 +872,7 @@ longer calls `drawOperation` synchronously at all: it resolves the
 complete, final particle list (cheap — `finalizeSprayParticles` only
 catches up on the last few points the live preview hadn't reached, plus
 the one-time flare), copies the live preview's own already-shown pixels
-into a dedicated `pendingCanvas` (zero-cost — the artist's eye was already
-on exactly those pixels), and queues a `PendingSprayBake` that
+into a dedicated `pendingCanvas`, and queues a `PendingSprayBake` that
 `runSprayBakeFrame` drains across many animation frames, each bounded to
 `SPRAY_BAKE_FRAME_BUDGET_MS` (a time budget checked via `performance.now()`,
 not a guessed particle-count-per-frame constant — real per-particle
@@ -895,6 +894,80 @@ drip generation/semantics, Undo grouping, and cap behavior are all
 completely unaffected — this is a rendering-scheduling fix layered on top
 of the same unchanged deterministic generators.
 
+**Problem 5 (MOP/SPRAY POINTER-UP WYSIWYG V1 — pointer-up still visibly
+redefined BOTH materials, on real devices, after Problem 4):** human
+acceptance on Mac and iPad found Problem 4's own fix insufficient — Spray
+still changed appearance at release, and Mop (previously assumed
+unaffected: "it never restarts anything, `resolveMopDabPlan` has no PRNG
+at all") did too, more visibly: live Mop read as smooth/continuous, while
+pointer-up revealed scattered, partially-skipped discrete dabs. Two
+separate, confirmed causes:
+
+1. **Spray: `beginSprayCanonicalBake`'s `pendingCanvas` snapshot could be
+   stale.** `pointerup` fires synchronously and is never guaranteed to be
+   preceded by one more `render()` for points captured in the final
+   `pointermove`(s) before release (`pointermove` only `scheduleRender()`s,
+   coalesced to the next animation frame). The canonical particle list WAS
+   already resolved from the complete, final `activePoints`, so a tail
+   segment's particles could exist in that list without ever having been
+   painted into `livePreviewCanvas` — the snapshot silently omitted them,
+   and they visibly "grew in" once the deferred bake caught up. Fixed by
+   one additional call: `beginSprayCanonicalBake` now calls
+   `advanceSprayLivePreview()` — the same function every ordinary animation
+   frame already calls — once more, explicitly, before building
+   `pendingCanvas`. It is idempotent when there is nothing new (the common
+   case) and, when there is an uncaptured tail, paints exactly those
+   particles (flat) into `livePreviewCanvas` first, so the snapshot is
+   always complete. This also makes `sprayEmissionCursor` unconditionally
+   non-null by snapshot time, so the previous "no live frame ever ran"
+   fallback (a separate flat `strokeSpray` call) is no longer reachable and
+   was removed.
+2. **Mop: `strokeMop`'s own Pass 2 (dabs) rendering decisions were never
+   append-stable**, one layer above the deposition plan Live Stroke
+   Stability V1/V2 already proved stable. `isDotLike` (`dabs.length <= 3`)
+   and each dab's lateral-scatter tangent (`dabs[index-1]`/`dabs[index+1]`,
+   array-index-adjacency) were both recomputed from whatever `dabs` array
+   THAT CALL happened to receive — a small live-preview window almost
+   always satisfied `isDotLike` (suppressing scatter and the ~40%
+   inclusion-skip entirely) and always produced one-sided tangents at its
+   own boundaries, regardless of the gesture's true total length. Fixed by
+   moving both decisions into stable, per-dab data resolved once inside
+   `mopDeposition.ts`: `MopEmissionPoint`/`MopDab.perpX`/`perpY` (a unit
+   vector perpendicular to the dab's own ORIGINATING SEGMENT — permanently
+   fixed the instant that segment is walked, never dependent on neighboring
+   dabs) and `MopDab.isDotLike` (true only for a dab among the first
+   `MOP_DOT_LIKE_DAB_THRESHOLD` ever produced for its gesture, by stable
+   ordinal position — `resolveMopDabPlan`'s new `dabOrdinalOffset`
+   parameter, default 0, lets a caller resolving a live-preview window pass
+   the running dab count from earlier windows so each new dab's ordinal
+   matches what a single complete-gesture call would assign it). A gesture
+   that starts dot-like and grows long keeps its first few dabs dot-like
+   forever — a deliberate, disclosed behavior refinement (the prior
+   all-or-nothing, whole-array-length-gated classification was inherently
+   incompatible with append-stability) rather than a bug fix that changes
+   nothing. `strokeMop` itself now just reads `dab.perpX`/`perpY`/
+   `isDotLike` directly — no more local index-adjacency lookup or
+   call-local length check. `blackbookRuntime.ts`'s live preview
+   (`advanceMopLivePreview`, replacing the inline Mop branch of
+   `advanceLivePreview`) tracks a gesture-scoped `mopDabOrdinalOffset`
+   across windows, incrementing it by each window's own dab count minus 1
+   (for the shared 1-point seam overlap, except the gesture's first
+   window) so the one dab repainted at each window boundary keeps a
+   consistent ordinal both times it's resolved. The canonical path
+   (`drawOperation`'s Mop branch, reload, `rebuildCommittedCacheIfNeeded`)
+   is completely untouched — it already always resolved dabs in one
+   complete-gesture call, so `dabOrdinalOffset` defaults to 0 there,
+   byte-identical to before this fix. The pre-existing, NOT addressed by
+   this batch, length-dependent adaptive step-widening and Douglas-Peucker
+   simplification inside `resolveMopEmissionPoints` (unlike Spray's own
+   equivalent, never given the "Revision 8"/Live Stroke Stability V2
+   hard-cutoff treatment) remain a separate, disclosed architectural
+   limitation for a sufficiently long gesture (longer than roughly
+   `MOP_MAX_EMISSION_POINTS * baseRadius * 0.45` of total path length) —
+   out of this batch's scope, since fixing it would mean changing Mop's
+   dab count/coverage behavior for long strokes, not merely its rendering
+   stability. Recorded as its own item in [../DEBT.md](../DEBT.md).
+
 **Development-only diagnostics**: `window.__blackbookRenderDiagnostics`
 (gated on `import.meta.env.DEV`, never active in a production build, never
 a `console.log`) exposes `scheduleCalls`/`renderNowCalls`/`actualRenders`
@@ -903,10 +976,12 @@ on-device-inspectable measure of how much coalescing is happening.
 
 ## 12. Known debt
 
-See [../DEBT.md](../DEBT.md) for the tracked, actionable items. Nothing new
-was added specific to BLACKBOOK in this pass — the naming-collision warning
-in §8 is recorded here as a caution, not filed as debt, since no code
-conflict currently exists (the two `WorldLayer` concepts don't interact).
+See [../DEBT.md](../DEBT.md) for the tracked, actionable items — including,
+as of MOP/SPRAY POINTER-UP WYSIWYG V1 (§11c "Problem 5"), Mop's own
+emission-resampling non-append-stability for a very long gesture. The
+naming-collision warning in §8 is recorded here as a caution, not filed as
+debt, since no code conflict currently exists (the two `WorldLayer`
+concepts don't interact).
 
 ## 13. Unresolved questions
 

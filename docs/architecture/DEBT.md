@@ -355,3 +355,53 @@ duplicate/echo playback; the persistent runtime UUID stayed unchanged;
 explicit RADIO OFF stopped playback. See
 [home/README.md](home/README.md)'s own RADIO-01 section for the full
 record. No longer an open item.
+
+---
+
+### BLACKBOOK Mop emission resampling is not append-stable for a very long gesture
+
+- **Problem**: `mopDeposition.ts`'s `resolveMopEmissionPoints` still uses
+  the length-dependent design Spray's own `resolveSprayEmissionPoints` was
+  deliberately moved AWAY from (LIVE STROKE STABILITY V2, see
+  [blackbook/README.md](blackbook/README.md) §11c "Problem 5"'s own note):
+  an adaptive `maxStep` (`Math.max(nominalStep, totalLength / budget)`)
+  and a Douglas-Peucker pre-simplification once raw point count exceeds
+  budget, BOTH recomputed from the CURRENT total point/length of whatever
+  array a given call receives. For a gesture long enough to cross that
+  threshold (roughly `MOP_MAX_EMISSION_POINTS * baseRadius * 0.45` of
+  total path length — e.g. ~1965px at the default width-34 `baseRadius`
+  of 17), a live-preview window's own small, short-of-threshold
+  `totalLength` resolves emissions at the fixed nominal step, while the
+  eventual canonical call over the COMPLETE, longer gesture resolves a
+  WIDER step (and/or a different Douglas-Peucker selection) for that SAME
+  earlier prefix — an emission-count/spacing divergence between live and
+  canonical, independent of (and not fixed by) "Problem 5"'s `isDotLike`/
+  tangent/`dabOrdinalOffset` fix, which only addressed `strokeMop`'s own
+  rendering-DECISION layer, not `resolveMopEmissionPoints`'s own
+  deposition-PLAN layer.
+- **Impact**: a sufficiently long, fast single Mop gesture (plausible for
+  a multi-second "mmmm"-style stroke) could still show some residual
+  live-vs-canonical dab-SPACING/COUNT difference at pointer-up, on top of
+  (separately from) whatever "Problem 5" already fixed. Not yet confirmed
+  by human acceptance either way — "Problem 5"'s own human retest used
+  gestures that may or may not have crossed this specific threshold.
+- **Current status**: not fixed. Deliberately left alone during "Problem
+  5" (MOP/SPRAY POINTER-UP WYSIWYG V1): porting Spray's exact fix (a hard
+  cutoff at `MOP_MAX_EMISSION_POINTS`, no widening) would truncate a long
+  gesture's tail instead of covering it (the opposite of what Mop's own
+  "Revision 4/8" widening/simplification was built to prevent) — fixing
+  this correctly requires either raising `MOP_MAX_EMISSION_POINTS` to make
+  widening unnecessary in practice, or a genuinely incremental, forward-
+  only widening scheme (grow the step going forward only, never
+  retroactively, once a running incremental emission COUNT approaches the
+  budget) — either of which is a deposition-behavior change, not a pure
+  rendering-stability fix, and was explicitly out of this batch's scope
+  ("do not change particle/dab counts").
+- **Revisit trigger**: if a future human acceptance pass (Mac/iPad) on a
+  deliberately very long, fast Mop gesture (multi-second, covering
+  several thousand px of path) reports a pointer-up visual change that
+  survives "Problem 5"'s own fix — confirm via the SAME incremental-vs-
+  canonical equivalence technique "Problem 5"'s own `mopDeposition.test.ts`
+  tests use, but with a gesture deliberately long enough to cross the
+  threshold above, before deciding between the two fix options named
+  above.

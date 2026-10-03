@@ -923,3 +923,89 @@ describe("SPRAY POINTER-UP RECONCILIATION V1 -- createSeededRandomStream resumpt
     expect(a.next()).toBe(b.next());
   });
 });
+
+/**
+ * MOP/SPRAY POINTER-UP WYSIWYG V1 -- models the exact scenario recon found:
+ * `pointerup` can fire with points captured AFTER the last completed
+ * animation frame (`pointermove` only schedules a render, coalesced to the
+ * next rAF -- `pointerup` does not wait for it), so a cursor that stopped
+ * advancing at the last RENDERED frame can be missing a tail of points by
+ * the time pointer-up runs. `beginSprayCanonicalBake`'s fix is to call
+ * `advanceSprayLivePreview()` (blackbookRuntime.ts) ONE more time, with
+ * the complete, final `activePoints`, before building its snapshot --
+ * these tests exercise the SAME underlying mechanism
+ * (`advanceSprayEmissionPoints`/`advanceSprayParticles`) that catch-up
+ * call relies on, directly, since blackbookRuntime.ts's own DOM-wired
+ * function has no independent unit-test harness in this project (it reads
+ * module-level canvas/pointer state, not pure inputs). Human iPad/Mac
+ * acceptance remains the verification of the actual wiring.
+ */
+describe("MOP/SPRAY POINTER-UP WYSIWYG V1 -- pointer-up tail catch-up", () => {
+  function zigZagStroke(count: number): { x: number; y: number }[] {
+    const points: { x: number; y: number }[] = [];
+    let x = 0;
+    for (let i = 0; i < count; i += 1) { x += 2; points.push({ x, y: 30 * Math.sin(i / 6) }); }
+    return points;
+  }
+
+  it("a catch-up advance call, given the COMPLETE final points, consumes a tail that arrived after the last advance -- the cursor is never left behind", () => {
+    const allPoints = zigZagStroke(60);
+    const baseRadius = 10;
+    const cap = STUDIORICH_STOCK_CAP;
+    const seed = hashSeed("mark-catchup");
+
+    // Simulate the last few completed live-preview frames -- stops short
+    // of the full gesture, as if pointerup fired before one more render.
+    const pointsAsOfLastFrame = allPoints.slice(0, 45);
+    let emissionCursor = advanceSprayEmissionPoints(null, pointsAsOfLastFrame, baseRadius, cap);
+    let particleCursor = advanceSprayParticles(null, seed, emissionCursor, baseRadius, cap);
+    const particlesBeforeCatchUp = particleCursor.particles.length;
+
+    // The catch-up call beginSprayCanonicalBake now makes: one more
+    // advance, with the TRUE final activePoints (including the
+    // never-rendered tail).
+    emissionCursor = advanceSprayEmissionPoints(emissionCursor, allPoints, baseRadius, cap);
+    particleCursor = advanceSprayParticles(particleCursor, seed, emissionCursor, baseRadius, cap);
+
+    expect(particleCursor.particles.length).toBeGreaterThan(particlesBeforeCatchUp);
+    // And the result is exactly what a canonical call over the complete
+    // points would produce for the same prefix -- the tail wasn't just
+    // "some new particles", it's the CORRECT remaining particles.
+    const canonicalFull = finalizeSprayParticles(null, seed, advanceSprayEmissionPoints(null, allPoints, baseRadius, cap), baseRadius, cap);
+    const finalCaughtUp = finalizeSprayParticles(particleCursor, seed, emissionCursor, baseRadius, cap);
+    expect(finalCaughtUp).toEqual(canonicalFull);
+  });
+
+  it("calling the catch-up advance with NO new points (the common case -- the last frame already covered everything) is a harmless no-op, never double-emitting", () => {
+    const allPoints = zigZagStroke(40);
+    const baseRadius = 10;
+    const cap = STUDIORICH_STOCK_CAP;
+    const seed = hashSeed("mark-noop-catchup");
+    let emissionCursor = advanceSprayEmissionPoints(null, allPoints, baseRadius, cap);
+    let particleCursor = advanceSprayParticles(null, seed, emissionCursor, baseRadius, cap);
+    const particleCountAfterFullAdvance = particleCursor.particles.length;
+
+    // The catch-up call, with the SAME final points (nothing new).
+    emissionCursor = advanceSprayEmissionPoints(emissionCursor, allPoints, baseRadius, cap);
+    particleCursor = advanceSprayParticles(particleCursor, seed, emissionCursor, baseRadius, cap);
+    expect(particleCursor.particles.length).toBe(particleCountAfterFullAdvance);
+  });
+
+  it("the snapshot's own particle set (what the catch-up call paints, flat, before finalize) is a strict subset/prefix of the final canonical particle list -- never a different arrangement, only possibly incomplete before catch-up and complete after", () => {
+    const allPoints = zigZagStroke(50);
+    const baseRadius = 10;
+    const cap = STUDIORICH_FAT_CAP;
+    const seed = hashSeed("mark-snapshot-subset");
+
+    const partial = advanceSprayParticles(null, seed, advanceSprayEmissionPoints(null, allPoints.slice(0, 35), baseRadius, cap), baseRadius, cap);
+    const caughtUpEmissions = advanceSprayEmissionPoints(advanceSprayEmissionPoints(null, allPoints.slice(0, 35), baseRadius, cap), allPoints, baseRadius, cap);
+    const caughtUpParticles = advanceSprayParticles(partial, seed, caughtUpEmissions, baseRadius, cap);
+    // Everything in the partial (pre-catch-up) snapshot is an exact,
+    // unaltered prefix of the caught-up (post-catch-up) snapshot.
+    expect(caughtUpParticles.particles.slice(0, partial.particles.length)).toEqual(partial.particles);
+
+    const canonical = resolveSprayParticlePlan(allPoints, baseRadius, seed, cap);
+    const finalized = finalizeSprayParticles(caughtUpParticles, seed, caughtUpEmissions, baseRadius, cap);
+    expect(finalized).toEqual(canonical);
+  });
+});

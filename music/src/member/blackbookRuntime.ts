@@ -64,7 +64,7 @@ import {
   type SprayParticle,
   type SprayParticleCursor,
 } from "./sprayDeposition";
-import { resolveMopDripPlans } from "./mopDeposition";
+import { resolveMopDabPlan, resolveMopDripPlans } from "./mopDeposition";
 import { createBlackbookHomeSurface } from "../home/blackbookHomeSurface";
 
 function required<T>(value: T | null, error: string): T { if (!value) throw new Error(error); return value; }
@@ -306,6 +306,7 @@ function resizeCanvasesToDisplaySize(): void {
   // explicitly (e.g. the PAGES drawer's own width transition).
   committedCacheDirty = true;
   liveBakedPointCount = 0;
+  mopDabOrdinalOffset = 0;
   sprayEmissionCursor = null;
   sprayParticleCursor = null;
 }
@@ -329,6 +330,18 @@ let committedCacheDirty = true;
  * (pan/zoom/viewport size) changes mid-gesture -- see `advanceLivePreview`.
  */
 let liveBakedPointCount = 0;
+/**
+ * MOP/SPRAY POINTER-UP WYSIWYG V1 -- how many Mop dabs have already been
+ * stably produced for the CURRENT gesture, across every live-preview
+ * window so far -- threaded into `resolveMopDabPlan`'s own
+ * `dabOrdinalOffset` so a dab's `isDotLike` classification depends on its
+ * stable ordinal position in the gesture, never on the size of whatever
+ * window happened to produce it (see `MOP_DOT_LIKE_DAB_THRESHOLD`'s own
+ * doc, mopDeposition.ts). Reset to 0 at exactly the same points
+ * `liveBakedPointCount` resets to 0 -- pointerdown, camera-signature
+ * change, resize.
+ */
+let mopDabOrdinalOffset = 0;
 /**
  * SPRAY POINTER-UP RECONCILIATION V1 -- the current gesture's own
  * incremental Spray deposition cursors (null = nothing resolved yet this
@@ -544,29 +557,33 @@ function rebuildCommittedCacheIfNeeded(): void {
 
 /**
  * DRAWING LATENCY V1 -- the live, in-progress Mop gesture's own
- * incremental preview. `resolveMopDabPlan` is already proven (LIVE STROKE
- * STABILITY V1/V2) to depend only on LOCAL, segment-to-segment context --
- * never on the array's own total length/count beyond the emission-count
- * ceiling -- so calling it on a bounded trailing WINDOW of `activePoints`
- * (one point of overlap with whatever was already baked, for correct
- * segment continuity at the seam) produces the same local deposition a
- * full from-scratch call would, without re-walking and re-painting
- * everything already baked this gesture. The window is painted onto
- * `livePreviewCanvas`, which is never cleared mid-gesture -- each call
- * only adds the NEWLY arrived material, never regenerates the whole
- * gesture-so-far.
+ * incremental preview, painted onto `livePreviewCanvas` (never cleared
+ * mid-gesture -- each call only adds the NEWLY arrived material).
  *
  * SPRAY POINTER-UP RECONCILIATION V1 -- Spray's own live preview no
- * longer shares this windowed approach (see `advanceSprayLivePreview`
+ * longer shares a windowed approach at all (see `advanceSprayLivePreview`
  * below) -- recon found the windowed particle field's own per-window PRNG
  * restart (plus the 1-point overlap's double emission) was producing a
  * live-accumulated particle set measurably denser (~19.3% on a
- * representative stroke) than the canonical single-stream computation,
- * which is exactly what made pointer-up's swap to canonical visibly
- * "redefine" the stroke on top of the (separately fixed) blocking paint
- * cost. Mop has no such divergence (it never restarts anything --
- * `resolveMopDabPlan` has no PRNG at all) and this batch's own scope is
- * Spray-only, so Mop's own preview is untouched here.
+ * representative stroke) than the canonical single-stream computation.
+ *
+ * MOP/SPRAY POINTER-UP WYSIWYG V1 -- the PREVIOUS doc here claimed "Mop
+ * has no such divergence -- resolveMopDabPlan has no PRNG at all." That
+ * was true of the DEPOSITION plan (dab x/y/radius, proven append-stable
+ * by LIVE STROKE STABILITY V1/V2) but false of `strokeMop`'s own
+ * RENDERING-time decisions, one layer up: `isDotLike` and the lateral-
+ * scatter tangent were both recomputed from whatever `dabs` array THIS
+ * CALL's own window happened to produce -- a small per-window array
+ * made `isDotLike` true far more often live than canonical ever would
+ * for the same gesture, and (regardless of that) a window's own first/
+ * last dab got a one-sided tangent estimate that differed from the
+ * two-sided one the SAME dab gets inside a complete-gesture call. Fixed
+ * by moving both decisions into stable, per-dab data (`MopDab.perpX`/
+ * `perpY`, resolved once from the dab's own originating SEGMENT;
+ * `MopDab.isDotLike`, resolved once from the dab's own stable ordinal
+ * position in the gesture via `resolveMopDabPlan`'s `dabOrdinalOffset`)
+ * -- see `advanceMopLivePreview` below for how the live path tracks that
+ * offset across windows, and mopDeposition.ts for the full mechanism.
  */
 function advanceLivePreview(): void {
   if (activeSupply !== "mop" && activeSupply !== "spray") return;
@@ -575,11 +592,42 @@ function advanceLivePreview(): void {
     advanceSprayLivePreview();
     return;
   }
+  advanceMopLivePreview();
+}
+
+/**
+ * MOP/SPRAY POINTER-UP WYSIWYG V1 -- still a windowed call (unlike
+ * Spray's full-growing-array cursor design) -- `resolveMopDabPlan`'s own
+ * x/y/radius/densityFactor output is already proven append-stable for a
+ * windowed call (LIVE STROKE STABILITY V1/V2), so re-resolving just this
+ * window's own dabs each frame remains correct and cheap. What changed
+ * is `mopDabOrdinalOffset`: a running count of every dab already
+ * produced for this gesture (across every earlier window), passed in so
+ * `resolveMopDabPlan` can assign each of THIS window's dabs the correct
+ * `isDotLike` ordinal -- the one piece of information a window, looking
+ * only at its own small slice, could never derive on its own.
+ */
+function advanceMopLivePreview(): void {
+  const operation = activeOperation(activePoints);
+  if (operation.operation !== "mop") return;
+  const scaledStyle = { ...operation.style, width: operation.style.width * widthScale() };
+  const baseRadius = scaledStyle.width * 0.5;
+  const screenPoints = activePoints.map((point) => docToScreen(point));
   const windowStart = Math.max(0, liveBakedPointCount - 1);
-  const windowPoints = activePoints.slice(windowStart);
+  const windowScreenPoints = screenPoints.slice(windowStart);
+  const isFirstWindow = liveBakedPointCount === 0;
   liveBakedPointCount = activePoints.length;
-  if (windowPoints.length < 2) return;
-  drawOperation({ ...activeOperation(activePoints), points: windowPoints }, livePreviewLayers, "livePreview");
+  if (windowScreenPoints.length < 2) return;
+  const dabs = resolveMopDabPlan(windowScreenPoints, baseRadius, mopDabOrdinalOffset);
+  strokeMop(livePreviewLayers.mop.context, windowScreenPoints, scaledStyle, operation.id, { dabs });
+  // The window's own first dab duplicates the previous window's own last
+  // dab (the shared 1-point overlap, kept for the BODY pass's segment
+  // continuity) -- subtracting 1 here (except for the gesture's first
+  // window, which has no overlap to subtract) is what keeps that ONE
+  // shared dab's own ordinal (and therefore isDotLike classification)
+  // consistent the second time it's resolved, as the next window's own
+  // first dab.
+  mopDabOrdinalOffset += dabs.length - (isFirstWindow ? 0 : 1);
 }
 
 /** Converts the gesture's own authored `activePoints` into the screen-space points `drawOperation`'s own Spray branch feeds `strokeSpray` -- the exact same `docToScreen` + tMs/pressure-carry mapping, kept in sync by being the one shared helper both paths now call. */
@@ -659,6 +707,7 @@ function render(): void {
     lastCameraSignature = cameraSignature;
     committedCacheDirty = true;
     liveBakedPointCount = 0;
+    mopDabOrdinalOffset = 0;
     sprayEmissionCursor = null;
     sprayParticleCursor = null;
     livePreviewContext.clearRect(0, 0, width(), height());
@@ -1261,6 +1310,13 @@ canvas.addEventListener("pointerdown", (event) => {
   // pixels, even though the canvas object is shared -- see
   // livePreviewLayers' own doc).
   liveBakedPointCount = 0;
+  // MOP/SPRAY POINTER-UP WYSIWYG V1 -- unlike sprayEmissionCursor/
+  // sprayParticleCursor (already reset at the END of the PREVIOUS
+  // pointerup), mopDabOrdinalOffset has no such reset -- it must be
+  // explicitly zeroed here, or a fresh gesture's own first dabs would
+  // inherit the just-finished gesture's final dab count and never
+  // qualify as dot-like.
+  mopDabOrdinalOffset = 0;
   livePreviewContext.clearRect(0, 0, width(), height());
   renderNow();
 });
@@ -1333,8 +1389,33 @@ canvas.addEventListener("pointermove", (event) => {
  * changes nothing visible; only once the background bake finishes does
  * the softer canonical fill quietly replace the flat one, at the same
  * particle positions.
+ *
+ * MOP/SPRAY POINTER-UP WYSIWYG V1 -- recon (human acceptance) found the
+ * snapshot copied from `livePreviewCanvas` could be STALE: `pointerup`
+ * fires synchronously and is never guaranteed to be preceded by one more
+ * `render()` for whatever points arrived in the final `pointermove`(s)
+ * before release (`pointermove` only `scheduleRender()`s, coalesced to the
+ * next animation frame -- `pointerup` doesn't wait for it). The canonical
+ * particle list below WAS already being resolved from the complete, final
+ * `activePoints`, so that tail segment's particles existed in the
+ * canonical list but had never been PAINTED anywhere live -- the snapshot
+ * silently omitted them, and they'd visibly "grow in" once the deferred
+ * bake caught up. Fixed by explicitly calling `advanceSprayLivePreview()`
+ * -- the exact same function every ordinary animation frame already calls
+ * -- ONE more time, right here, before building `pendingCanvas`. It is
+ * idempotent when there's nothing new (the common case: the last frame
+ * already covered everything) and, when there IS an uncaptured tail,
+ * paints exactly those particles (flat, same primitive) onto
+ * `livePreviewCanvas` first -- so by the time `pendingCanvas` copies it,
+ * every particle belonging in the live representation is already there.
+ * This is also what makes `sprayEmissionCursor` unconditionally non-null
+ * by the time `pendingCanvas` is built (even a gesture that finished
+ * inside a single frame now gets one live-preview pass here), so there is
+ * no longer a separate "no live frame ever ran" fallback to maintain.
  */
 function beginSprayCanonicalBake(operation: BlackbookStroke): void {
+  advanceSprayLivePreview();
+
   const cap = resolveSprayCapProfile(operation.capId);
   const scaledStyle = { ...operation.style, width: operation.style.width * widthScale() };
   const baseRadius = scaledStyle.width * 0.5;
@@ -1346,24 +1427,12 @@ function beginSprayCanonicalBake(operation: BlackbookStroke): void {
   pendingCanvas.width = livePreviewCanvas.width;
   pendingCanvas.height = livePreviewCanvas.height;
   const pendingContext = required(pendingCanvas.getContext("2d"), "blackbook_material_canvas_unavailable");
-  if (sprayEmissionCursor) {
-    // The common case (any gesture lasting more than one animation frame,
-    // i.e. virtually every real drag): the artist's eye was already on
-    // exactly these pixels a moment ago -- copying them is cheaper than,
-    // and pixel-identical to, repainting.
-    pendingContext.drawImage(livePreviewCanvas, 0, 0);
-  } else {
-    // Rare edge case: a gesture so brief no render() ever ran between its
-    // pointerdown and this pointerup, so `livePreviewCanvas` never
-    // received a single live-preview frame for it (still showing
-    // whatever the PREVIOUS gesture left on it, already cleared, or
-    // blank). Fall back to one flat-filled paint of the SAME final
-    // particles/core passes this bake will later repaint with gradient
-    // fill -- the identical bounded primitive 1003C already proved cheap
-    // enough for live use, just run once for the whole (necessarily
-    // short -- no frame had time to fire) gesture instead of per-window.
-    strokeSpray(pendingContext, screenPoints, scaledStyle, operation.id, cap, { particles, particleRendering: "flat" });
-  }
+  // The catch-up call above guarantees `livePreviewCanvas` now reflects
+  // every point in the complete, final `activePoints` -- the artist's eye
+  // was (as of a moment ago, at the latest) on exactly these pixels, so
+  // copying them is cheaper than, and now provably complete versus,
+  // repainting.
+  pendingContext.drawImage(livePreviewCanvas, 0, 0);
 
   const bakeCanvas = document.createElement("canvas");
   bakeCanvas.width = livePreviewCanvas.width;
