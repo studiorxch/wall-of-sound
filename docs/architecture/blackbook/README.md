@@ -710,6 +710,83 @@ automatic oscillation" instruction). No real can-distance/orientation
 input; no spray audio playback; no per-cap settings UI beyond the
 existing minimal four-button selector.
 
+## 11c. RENDER SCHEDULING & COMPOSITING (current, established across two performance batches)
+
+Real iPad + Apple Pencil testing exposed two successive problems in
+`blackbookRuntime.ts`'s own `render()`/compositing pipeline — unrelated to
+deposition math, persistence, or auth — now fixed and recorded here so a
+future change to this pipeline doesn't reintroduce either.
+
+**Problem 1 (DRAWING LATENCY V1):** `render()` replayed every committed
+operation's full deterministic deposition from scratch, plus the entire
+in-progress gesture from point zero, on every single pointer dispatch —
+cheap for Pencil/Pen/Marker/Eraser (one smoothed path + one `stroke()`),
+catastrophic for Mop/Spray (particle/dab generation), and scaling with
+total session marks × gesture length. Fixed by splitting rendering into
+two parallel five-canvas layer sets:
+
+- `committedLayers` — already-committed Marks' already-rendered pixels.
+  Rebuilt in full only on an explicit Mark-set change (Undo, CLEAR,
+  CLEAR-undo, Pages/artwork switching, sign-out) or a detected camera/
+  viewport change (a pan/zoom/size signature compared every `render()`
+  call, rather than hunting down every individual pan/zoom/resize call
+  site); updated incrementally (one `drawOperation` call) on the ordinary
+  single-commit path.
+- `livePreviewLayers` (one shared scratch canvas, Mop/Spray only) — the
+  active gesture's own deposition computed/painted only for a bounded
+  trailing WINDOW of newly-arrived points each frame (one point of
+  overlap for segment continuity), never the whole gesture-so-far. This
+  is an explicit INTERACTION representation, not the canonical Mark —
+  core-pass jitter stays seam-free across window boundaries (a fixed
+  shared seed), while the particle field's own PRNG stream restarts at
+  each window boundary (a disclosed, transient, live-only cosmetic
+  approximation). `pointerup` always re-runs the unmodified, unwindowed
+  generators on the complete, final points and bakes that canonical
+  result into `committedLayers` in the same synchronous call that
+  discards the live preview — no gap, jump, or duplication at commit.
+
+**Problem 2 (DRAWING LATENCY V2a — a regression Problem 1's own fix
+introduced):** compositing `committedLayers` into `materialLayers`
+every `render()` call was done UNCONDITIONALLY for all five materials,
+even ones with no active gesture that frame — a flat compositing tax
+(10 full-canvas `drawImage` calls + 5 `clearRect`) paid identically by
+every tool, including Pencil/Pen/Marker/Eraser, which never needed the
+cache's deposition-skipping benefit. Fixed: only the ONE material
+actually being drawn into this frame (if any) goes through the
+`materialLayers` compositing hop; every other material's cached pixels
+are blitted straight from `committedLayers` onto the main canvas,
+skipping `materialLayers` entirely for that frame. **The lesson for any
+future change here: a per-frame compositing step must be scoped to
+"only what changed," never applied unconditionally "for correctness" —
+that's exactly how this regression was introduced the first time.**
+
+**Problem 2b (DRAWING LATENCY V2b — the actual shared bottleneck):**
+even with Problem 1 fixed, EVERY tool still called `render()`
+synchronously, directly inside the `pointermove` handler, once per
+dispatched event, with no scheduling at all. Apple Pencil's dispatch
+rate can exceed how fast one full, synchronous render can complete,
+producing a growing event backlog — the visible line falls behind the
+physical Pencil position the faster/longer a gesture runs. Fixed by
+`renderScheduler.ts` (`createRenderScheduler`), a tiny, dependency-free,
+unit-tested module: `scheduleRender()` (used by `pointermove`, wheel-zoom,
+and the canvas `ResizeObserver` — every high-frequency trigger) requests
+at most one pending `requestAnimationFrame` callback, coalescing any
+number of triggers within one frame interval into a single render;
+`renderNow()` (used by every discrete action — `pointerdown`/`pointerup`,
+Undo, CLEAR, Pages/artwork switching, sign-out, tool/button clicks, FIT,
+resize-complete) cancels any pending scheduled frame and renders
+synchronously, guaranteeing no stale callback ever repaints obsolete
+gesture/Mark-set state after a discrete action invalidates it. Point
+capture (`activePoints.push`, `getCoalescedEvents`) is completely
+unaffected — this only changes WHEN the already-captured points get
+painted, never how many are captured or what gets computed.
+
+**Development-only diagnostics**: `window.__blackbookRenderDiagnostics`
+(gated on `import.meta.env.DEV`, never active in a production build, never
+a `console.log`) exposes `scheduleCalls`/`renderNowCalls`/`actualRenders`
+counters — the ratio between triggers and actual renders is the live,
+on-device-inspectable measure of how much coalescing is happening.
+
 ## 12. Known debt
 
 See [../DEBT.md](../DEBT.md) for the tracked, actionable items. Nothing new

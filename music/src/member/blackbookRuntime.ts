@@ -27,6 +27,7 @@ import {
 } from "./blackbookArtworkBridge";
 import { createCartesianCamera, type CartesianCamera, type DocRect } from "./cartesianWorkspaceCamera";
 import { createStableMarkId } from "./mapArtworkBridge";
+import { createRenderScheduler } from "./renderScheduler";
 import { createHostAwareMemberIdentity } from "./hostAwareMemberIdentity";
 import { createCurrentArtworkSession } from "./currentArtworkSession";
 import { numberArtworksForPagesDrawer, pickReplacementArtworkId } from "./artworkGallery";
@@ -491,6 +492,18 @@ function advanceLivePreview(): void {
   drawOperation({ ...activeOperation(activePoints), points: windowPoints }, livePreviewLayers);
 }
 
+/** The one shared supply->material mapping `drawOperation` and `render` both need -- never duplicated. Eraser targets graphite only. */
+function materialIdForSupply(supply: "pencil" | "pen" | "marker" | "mop" | "spray" | "eraser"): MaterialLayerId {
+  return supply === "pencil" ? "graphite"
+    : supply === "pen" ? "ink"
+    : supply === "marker" ? "marker"
+    : supply === "mop" ? "mop"
+    : supply === "spray" ? "spray"
+    : "graphite";
+}
+
+const MATERIAL_DRAW_ORDER: readonly MaterialLayerId[] = ["graphite", "mop", "spray", "ink", "marker"];
+
 function render(): void {
   renderWorkspace();
   const cameraSignature = currentCameraSignature();
@@ -501,27 +514,39 @@ function render(): void {
     livePreviewContext.clearRect(0, 0, width(), height());
   }
   rebuildCommittedCacheIfNeeded();
-  for (const layer of Object.values(materialLayers)) layer.context.clearRect(0, 0, width(), height());
-  for (const materialId of Object.keys(materialLayers) as MaterialLayerId[]) {
-    materialLayers[materialId].context.drawImage(committedLayers[materialId].canvas, 0, 0, width(), height());
-  }
-  if (activePoints.length > 1) {
+
+  // DRAWING LATENCY V2 -- fixes e005906's own regression: that pass
+  // unconditionally copied all five `committedLayers` into all five
+  // `materialLayers` on EVERY render, even for materials nothing touched
+  // that frame -- a flat compositing tax paid identically by every tool,
+  // including Pencil/Pen/Marker/Eraser (which never needed the cache's
+  // deposition-skipping benefit in the first place). Only the ONE
+  // material actually being drawn into this frame (if any) needs the
+  // extra committed+live compositing hop through `materialLayers`; every
+  // other material's already-cached pixels go STRAIGHT onto the main
+  // canvas, skipping `materialLayers` (and its own `clearRect`) entirely.
+  const activeMaterialId: MaterialLayerId | null = activePoints.length > 1 ? materialIdForSupply(activeSupply) : null;
+
+  for (const materialId of MATERIAL_DRAW_ORDER) {
+    if (materialId !== activeMaterialId) {
+      ctx.drawImage(committedLayers[materialId].canvas, 0, 0, width(), height());
+      continue;
+    }
+    const layer = materialLayers[materialId];
+    layer.context.clearRect(0, 0, width(), height());
+    layer.context.drawImage(committedLayers[materialId].canvas, 0, 0, width(), height());
     if (activeSupply === "mop" || activeSupply === "spray") {
       advanceLivePreview();
-      materialLayers[activeSupply].context.drawImage(livePreviewCanvas, 0, 0, width(), height());
+      layer.context.drawImage(livePreviewCanvas, 0, 0, width(), height());
     } else {
       // Pencil/Pen/Marker/Eraser's own `drawOperation` cost is cheap
       // (quadratic-smoothed path + one stroke(), no particle/dab
-      // generation) -- replaying it fresh every frame was never the
-      // latency problem this batch exists to fix, so it stays unchanged.
-      drawOperation(activeOperation(activePoints));
+      // generation) -- recomputing it fresh every frame was never the
+      // latency problem this V1/V2 pair exists to fix.
+      drawOperation(activeOperation(activePoints), materialLayers);
     }
+    ctx.drawImage(layer.canvas, 0, 0, width(), height());
   }
-  ctx.drawImage(materialLayers.graphite.canvas, 0, 0, width(), height());
-  ctx.drawImage(materialLayers.mop.canvas, 0, 0, width(), height());
-  ctx.drawImage(materialLayers.spray.canvas, 0, 0, width(), height());
-  ctx.drawImage(materialLayers.ink.canvas, 0, 0, width(), height());
-  ctx.drawImage(materialLayers.marker.canvas, 0, 0, width(), height());
   renderArtboardOutline();
   // BLACKBOOK CLEAR + Single-Step Undo V1 -- Undo must stay enabled right
   // after CLEAR even though `operations` is now empty (there's a pending
@@ -544,6 +569,38 @@ function render(): void {
   // same "visually modest, clearly subordinate" treatment as the rest of
   // this temporary instrument.
   gradeSelect.disabled = activeSupply !== "pencil";
+}
+
+/**
+ * DRAWING LATENCY V2 -- development-only counters proving the scheduler's
+ * actual coalescing behavior, inspectable live (e.g. in Safari's own Web
+ * Inspector console while drawing on iPad) via
+ * `window.__blackbookRenderDiagnostics` -- never a `console.log` (no
+ * production noise), and the whole block is gated on `import.meta.env.DEV`
+ * so it has zero footprint in a production build. `scheduleCalls` counts
+ * every `scheduleRender()` call (one per pointermove/wheel/resize
+ * dispatch); `actualRenders` counts every real `render()` execution --
+ * the ratio between them IS the measured coalescing factor.
+ */
+const renderDiagnostics = import.meta.env.DEV
+  ? { scheduleCalls: 0, renderNowCalls: 0, actualRenders: 0 }
+  : null;
+if (renderDiagnostics) {
+  (window as unknown as { __blackbookRenderDiagnostics?: typeof renderDiagnostics }).__blackbookRenderDiagnostics = renderDiagnostics;
+}
+const renderScheduler = createRenderScheduler(() => {
+  if (renderDiagnostics) renderDiagnostics.actualRenders += 1;
+  render();
+});
+/** Coalesces many triggers (pointermove/wheel/resize dispatches) within one frame interval into at most one real render -- see renderScheduler.ts's own doc for why this is the actual latency fix. */
+function scheduleRender(): void {
+  if (renderDiagnostics) renderDiagnostics.scheduleCalls += 1;
+  renderScheduler.schedule();
+}
+/** Cancels any pending scheduled render and renders synchronously, right now -- every discrete state-changing action (pointerup, Undo, CLEAR, Pages/artwork switching, sign-out, a tool click) uses this so nothing stale can repaint obsolete state later. */
+function renderNow(): void {
+  if (renderDiagnostics) renderDiagnostics.renderNowCalls += 1;
+  renderScheduler.renderNow();
 }
 
 // Calibration V1 (revised): quadratic-midpoint smoothing (see
@@ -589,12 +646,7 @@ function drawOperation(operation: BlackbookOperation, layers: MaterialLayerSet =
     dripCtx.restore();
     return;
   }
-  const materialId = operation.operation === "pencil" ? "graphite"
-    : operation.operation === "pen" ? "ink"
-    : operation.operation === "marker" ? "marker"
-    : operation.operation === "mop" ? "mop"
-    : operation.operation === "spray" ? "spray"
-    : "graphite"; // eraser targets graphite only
+  const materialId = materialIdForSupply(operation.operation);
   const materialCtx = layers[materialId].context;
   if (operation.operation === "mop") {
     materialCtx.save();
@@ -957,7 +1009,7 @@ function applyActiveArtwork(): void {
   committedCacheDirty = true;
   activePageFrame = active?.pageFrame ?? BLACKBOOK_PAGE_FRAME;
   fitPageIntoView();
-  render();
+  renderNow();
 }
 
 /**
@@ -1037,7 +1089,7 @@ canvas.addEventListener("pointerdown", (event) => {
   // livePreviewLayers' own doc).
   liveBakedPointCount = 0;
   livePreviewContext.clearRect(0, 0, width(), height());
-  render();
+  renderNow();
 });
 canvas.addEventListener("pointermove", (event) => {
   if (!canvas.hasPointerCapture(event.pointerId)) return;
@@ -1046,7 +1098,7 @@ canvas.addEventListener("pointermove", (event) => {
       cameraView.panBy(event.clientX - lastScreenPoint.x, event.clientY - lastScreenPoint.y);
     }
     lastScreenPoint = { x: event.clientX, y: event.clientY };
-    render();
+    scheduleRender();
     return;
   }
   if (memberState.status !== "signedIn") return;
@@ -1082,7 +1134,7 @@ canvas.addEventListener("pointermove", (event) => {
     if (activeSupply === "spray" && activePoints.length >= MAX_SPRAY_RAW_POINTS) break;
     activePoints.push(point(sample));
   }
-  render();
+  scheduleRender();
 });
 canvas.addEventListener("pointerup", (event) => {
   if (!canvas.hasPointerCapture(event.pointerId)) return;
@@ -1127,7 +1179,7 @@ canvas.addEventListener("pointerup", (event) => {
   }
   activeOperationId = null;
   activePoints = [];
-  render();
+  renderNow();
 });
 
 undoButton.addEventListener("click", () => {
@@ -1136,7 +1188,7 @@ undoButton.addEventListener("click", () => {
     operations = [...restored];
     committedCacheDirty = true; // DRAWING LATENCY V1 -- Mark set changed wholesale
     lastClearSnapshot = null;
-    render();
+    renderNow();
     const target = currentArtwork.getState();
     if (target.kind === "artwork") {
       showStatus("Saving…", "info");
@@ -1154,7 +1206,7 @@ undoButton.addEventListener("click", () => {
   const removedGesture = popLastGesture();
   if (removedGesture.length === 0) return;
   committedCacheDirty = true; // DRAWING LATENCY V1 -- Mark set changed wholesale
-  render();
+  renderNow();
   showStatus("Saving…", "info");
   void Promise.all(removedGesture.map((operation) => persistence.removeStroke(operation)))
     .then(() => showStatus("Saved", "success"))
@@ -1181,7 +1233,7 @@ function clearArtwork(): void {
   operations = [];
   committedCacheDirty = true; // DRAWING LATENCY V1 -- Mark set changed wholesale
   lastClearSnapshot = previous;
-  render();
+  renderNow();
   if (target.kind !== "artwork") return; // nothing persisted yet to clear (defensive -- operations.length>0 already implies a real Artwork exists)
   showStatus("Saving…", "info");
   void replaceArtworkMarks(target.artworkId, [])
@@ -1192,12 +1244,12 @@ clearButton.addEventListener("click", clearArtwork);
 
 panButton.addEventListener("click", () => {
   panMode = !panMode;
-  render();
+  renderNow();
 });
 
 fitButton.addEventListener("click", () => {
   fitPageIntoView();
-  render();
+  renderNow();
 });
 
 /**
@@ -1223,7 +1275,7 @@ function startNewPage(): void {
   activePageFrame = BLACKBOOK_PAGE_FRAME;
   fitPageIntoView();
   showStatus("New page", "success");
-  render();
+  renderNow();
 }
 newButton.addEventListener("click", startNewPage);
 
@@ -1402,7 +1454,7 @@ canvas.addEventListener("wheel", (event) => {
   const rect = canvas.getBoundingClientRect();
   const factor = Math.exp(-event.deltaY * 0.0015);
   cameraView.zoomAt(event.clientX - rect.left, event.clientY - rect.top, factor, width(), height(), MIN_ZOOM, MAX_ZOOM);
-  render();
+  scheduleRender();
 }, { passive: false });
 
 /**
@@ -1441,7 +1493,7 @@ canvas.addEventListener("wheel", (event) => {
  */
 new ResizeObserver(() => {
   resizeCanvasesToDisplaySize();
-  render();
+  scheduleRender();
 }).observe(canvas);
 
 /**
@@ -1469,7 +1521,7 @@ function selectSupply(supply: DrawingSupplyId | "eraser"): void {
     colorControl.value = supplySettings[supply].color;
   }
   updateContextualControls(supply);
-  render();
+  renderNow();
 }
 
 function rememberSupplySettings(): void {
@@ -1500,7 +1552,7 @@ penButton.addEventListener("click", () => selectSupply("pen"));
 markerButton.addEventListener("click", () => selectSupply("marker"));
 mopButton.addEventListener("click", () => selectSupply("mop"));
 sprayButton.addEventListener("click", () => selectSupply("spray"));
-eraserButton.addEventListener("click", () => { activeSupply = "eraser"; updateContextualControls("eraser"); render(); });
+eraserButton.addEventListener("click", () => { activeSupply = "eraser"; updateContextualControls("eraser"); renderNow(); });
 colorControl.addEventListener("input", rememberSupplySettings);
 widthControl.addEventListener("input", rememberSupplySettings);
 opacityControl.addEventListener("input", rememberSupplySettings);
@@ -1568,7 +1620,7 @@ memberIdentity.subscribe((state) => {
     persistence.replaceKnownArtworks([]);
     closePagesDrawer();
     fitPageIntoView();
-    render();
+    renderNow();
     // HOST-03 -- also a stable, interactive state (the existing "sign in to
     // draw" page), and readiness doesn't gate on auth resolving any more
     // than MAP's own MapboxViewportRuntime.onReady does; idempotent.
@@ -1578,5 +1630,5 @@ memberIdentity.subscribe((state) => {
 
 resizeCanvasesToDisplaySize();
 fitPageIntoView();
-render();
+renderNow();
 void memberIdentity.start();
