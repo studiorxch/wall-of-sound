@@ -15,17 +15,15 @@ import { describe, expect, it } from "vitest";
  * justify its own existence -- BLACKBOOK must never present an
  * interactive-looking control that does nothing.
  *
- * This guards both HTML surfaces that shared the markup against it
- * silently reappearing.
+ * This guards the canonical BLACKBOOK HTML surface against it silently
+ * reappearing. `blackbook-spray-test.html` (the other surface this test
+ * used to also guard) was itself retired separately -- see
+ * `docs/architecture/blackbook/README.md`'s own "RETIRED" note -- so there
+ * is only one HTML surface left to check.
  */
 describe("BLACKBOOK SYSTEM-MENU AFFORDANCE REMOVAL V1", () => {
   it("blackbook.html no longer contains the dead #blackbook-menu control", () => {
     const html = readFileSync(new URL("../../blackbook.html", import.meta.url), "utf8");
-    expect(html).not.toContain("blackbook-menu");
-  });
-
-  it("blackbook-spray-test.html no longer contains the dead #blackbook-menu control", () => {
-    const html = readFileSync(new URL("../../blackbook-spray-test.html", import.meta.url), "utf8");
     expect(html).not.toContain("blackbook-menu");
   });
 });

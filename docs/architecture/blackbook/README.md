@@ -686,17 +686,27 @@ without ever playing a sound. A future playback layer keying off this
 state, and wiring real spray audio into BLACKBOOK at all, remain
 unimplemented.
 
-**Dev-only Spray Test / Calibration surface**: `music/blackbook-spray-test.html`,
-following this repo's existing `*-debug.html` dev-surface convention
-(`station-3d-debug.html`, `home-dev.html`). A byte-for-byte copy of
+**Dev-only Spray Test / Calibration surface -- RETIRED.**
+`music/blackbook-spray-test.html` was a byte-for-byte copy of
 `blackbook.html`'s own markup/CSS (same element ids) plus one addition — a
 purely decorative, `pointer-events: none`, non-persisted overlay labeling
 the calibration gestures (01 CLEAN LINE … 13 WHIP/SNAP, plus a large
-unrestricted TAG zone) from this batch's own brief. It loads
-`blackbookRuntime.ts` completely unchanged and reuses BLACKBOOK's real
-persistence/page model as-is (use NEW to start a dedicated test page, then
-DELETE it afterward) — no parallel drawing engine, no second persistence
-path.
+unrestricted TAG zone) from this batch's own brief. It loaded
+`blackbookRuntime.ts` completely unchanged and reused BLACKBOOK's real
+persistence/page model as-is — no parallel drawing engine, no second
+persistence path. Deleted during BLACKBOOK Presentation Readiness
+follow-up: being a hand-duplicated HTML shell (never in `vite.config.ts`'s
+own `rollupOptions.input`, so never part of any production build), its
+markup silently drifted out of sync with `blackbook.html` itself (it still
+showed the pre-rename `ERASER` label and the already-removed `…`
+system-menu affordance) and was mistaken for a canonical BLACKBOOK
+presentation surface during a physical acceptance pass, undermining that
+pass's own evidence. `blackbook.html` is the one canonical BLACKBOOK
+presentation/acceptance surface; no replacement calibration shell was
+created. The calibration gestures it named were never load-bearing test
+infrastructure -- all real Spray/Mop regression coverage lives in
+`sprayDeposition.test.ts`/`mopDeposition.test.ts`/`strokeSmoothing.test.ts`
+and friends, entirely independent of this HTML file.
 
 **What this pass deliberately leaves unfinished**: true per-segment
 (within-one-stroke) variable core width — the engine's one continuous
