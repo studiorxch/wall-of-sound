@@ -453,3 +453,16 @@ record. No longer an open item.
   lone particle's `arc()` footprint — position and radius — is byte-
   identical between the flat and gradient paint calls; only the fill
   primitive differs).
+- **Decision (1006L, physical acceptance closed)**: human
+  physical-acceptance decision, recorded without a code change: accept
+  the current Mop behavior as documented debt. Do not raise
+  `MOP_MAX_EMISSION_POINTS` (it only moves the boundary while changing
+  long-stroke dab density/appearance) and do not begin the incremental
+  forward-only resampling redesign in this acceptance cycle — the
+  principled fix, but architectural work, remaining a separately scoped
+  future improvement. BLACKBOOK physical acceptance for Mop is recorded
+  as PASS WITH DOCUMENTED LIMITATION at the emission-budget threshold
+  established by 1006K's own reproduction above. This item stays open in
+  `DEBT.md` (status unchanged: not fixed) — it is accepted as a known,
+  bounded limitation, not closed. Revisit trigger unchanged: either named
+  remedy, whenever separately authorized and scoped.
