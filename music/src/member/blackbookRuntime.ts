@@ -65,6 +65,7 @@ import {
   type SprayParticleCursor,
 } from "./sprayDeposition";
 import { resolveMopDabPlan, resolveMopDripPlans } from "./mopDeposition";
+import { partitionPendingBakesBySurvival } from "./pendingBakeLifecycle";
 import { createBlackbookHomeSurface } from "../home/blackbookHomeSurface";
 
 function required<T>(value: T | null, error: string): T { if (!value) throw new Error(error); return value; }
@@ -537,21 +538,40 @@ function currentCameraSignature(): string {
  * `drawOperation` (and therefore the exact same deterministic
  * `strokeMop`/`strokeSpray`/etc.) every other render path already used --
  * this changes WHEN that work happens, never WHAT it computes.
+ *
+ * COMMITTED-CACHE PENDING-BAKE SURVIVAL V1 -- a wholesale Mark-set/
+ * viewport change (Undo, CLEAR, NEW, Artwork/Pages switching, resize,
+ * sign-out, ...) used to drop the ENTIRE `pendingSprayBakes` queue and
+ * replay EVERY operation through the synchronous canonical path below --
+ * correct for whatever operation the mutation actually removed, but
+ * wrong for every OTHER, unrelated, still-present Spray operation whose
+ * own background bake just happened to still be chunking: forcing IT
+ * through the full blocking per-particle gradient paint reintroduced the
+ * exact stall 1003D exists to prevent, through an unrelated Undo/CLEAR/
+ * NEW/Pages-switch. `partitionPendingBakesBySurvival`
+ * (pendingBakeLifecycle.ts) is the one pure decision this fixes: a bake
+ * SURVIVES if its own `operationId` is still present in the NEW
+ * `operations` about to be replayed. A surviving bake's own operation is
+ * SKIPPED in the synchronous loop below -- its existing `pendingCanvas`
+ * snapshot already covers it visually (exactly as it already does mid-
+ * gesture, see `PendingSprayBake`'s own doc), and its existing
+ * `runSprayBakeFrame` progress continues completely undisturbed,
+ * merging into `committedLayers.spray` whenever it finishes, same as
+ * always -- never drawn twice, never double-exposed. An orphaned bake
+ * (its own operation genuinely removed) is dropped outright, exactly as
+ * before -- a stale bake must never merge into a Mark set that no longer
+ * contains its own operation.
  */
 function rebuildCommittedCacheIfNeeded(): void {
   if (!committedCacheDirty) return;
-  // SPRAY POINTER-UP RECONCILIATION V1 -- a wholesale Mark-set/viewport
-  // change (Undo, CLEAR, Pages switching, resize, ...) is about to fully
-  // replay `operations` below via the unchanged synchronous canonical
-  // `drawOperation` path -- any spray bake still in flight is stale
-  // either way (if its own operation was just removed, baking it in
-  // would be wrong; if it's still present, the loop below already
-  // re-bakes it canonically, synchronously). Dropping the queue here, in
-  // this ONE place, is what keeps every `committedCacheDirty = true` call
-  // site correct without having to individually remember to also clear it.
-  pendingSprayBakes = [];
+  const { surviving } = partitionPendingBakesBySurvival(operations, pendingSprayBakes);
+  pendingSprayBakes = surviving; // orphaned bakes are simply excluded here -- dropped, never merged
+  const survivingOperationIds = new Set(surviving.map((bake) => bake.operationId));
   for (const layer of Object.values(committedLayers)) layer.context.clearRect(0, 0, width(), height());
-  for (const operation of operations) drawOperation(operation, committedLayers);
+  for (const operation of operations) {
+    if (survivingOperationIds.has(operation.id)) continue;
+    drawOperation(operation, committedLayers);
+  }
   committedCacheDirty = false;
 }
 

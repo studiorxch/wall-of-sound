@@ -968,6 +968,51 @@ separate, confirmed causes:
    dab count/coverage behavior for long strokes, not merely its rendering
    stability. Recorded as its own item in [../DEBT.md](../DEBT.md).
 
+**Problem 6 (COMMITTED-CACHE PENDING-BAKE SURVIVAL V1 — an unrelated
+Mark-set mutation could force a surviving Spray operation's own
+still-chunking bake to be abandoned and resurrect the original pointer-up
+stall):** an adversarial architecture review of the 1003D/1003E lifecycle
+found that `rebuildCommittedCacheIfNeeded` dropped its entire
+`pendingSprayBakes` queue and replayed every operation through the
+expensive synchronous canonical `drawOperation` path whenever the
+committed Mark set changed wholesale (Undo, CLEAR, NEW, Artwork/Pages
+switching, resize, sign-out) — correct for whatever operation a mutation
+actually removed, but wrong for every other, unrelated, still-present
+Spray operation whose own background bake just happened to still be
+chunking: forcing it through the full blocking per-particle gradient
+paint reintroduced the exact stall 1003D exists to prevent, through a
+different door (an unrelated Undo/CLEAR/NEW/Pages-switch while that
+bake is in flight — e.g. draw two fast Spray strokes back to back, then
+Undo only the second one before the first one's bake finishes). Fixed
+by one pure, deterministic decision,
+`partitionPendingBakesBySurvival` (`pendingBakeLifecycle.ts`, a new,
+DOM-free module — `blackbookRuntime.ts` has no test harness of its own,
+so this is the smallest seam that makes the decision unit-testable): a
+pending bake SURVIVES a rebuild if and only if its own `operationId` is
+still present in the new `operations` array about to be replayed. A
+surviving bake's own operation is skipped in the synchronous replay
+(its existing `pendingCanvas` snapshot already covers it visually,
+exactly as it already does mid-gesture) and its existing
+`runSprayBakeFrame` progress continues completely undisturbed, merging
+into `committedLayers.spray` whenever it finishes — never drawn twice,
+never double-exposed. An orphaned bake (its own operation genuinely
+removed) is dropped outright, exactly as before. Deliberately NOT
+extended to every already-fully-baked, quiescent Spray operation (one
+with no pending-bake entry at all) — those still pay the same "a
+wholesale rebuild replays every operation" cost every other material
+has always paid since `e005906`, a pre-existing, separately-scoped,
+accepted trade-off of the whole-cache-rebuild design, not part of the
+1003D/E pending-bake lifecycle this fix completes. One disclosed, narrow
+residual NOT fixed here (explicitly out of scope — drip-specific work):
+a `material-drip` operation is never skipped during replay regardless
+of its origin's own survival, so a Spray origin that produced a drip
+AND still has a surviving pending bake AND is replayed due to an
+unrelated mutation will have its drip's committed pixels painted before
+its own origin's bake later merges — a z-order inversion at the
+drip/origin overlap region, narrower and rarer than the main defect
+(requires a slow dwelled stroke that crosses the drip threshold, not
+the fast gestures 1003D/E's own human acceptance exercises).
+
 **Development-only diagnostics**: `window.__blackbookRenderDiagnostics`
 (gated on `import.meta.env.DEV`, never active in a production build, never
 a `console.log`) exposes `scheduleCalls`/`renderNowCalls`/`actualRenders`
