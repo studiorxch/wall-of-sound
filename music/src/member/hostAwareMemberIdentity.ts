@@ -93,12 +93,23 @@ export function createHostAwareMemberIdentity(
     // uses -- HOME's own readiness handshake (Mapbox viewport / BLACKBOOK's
     // first stable state) routinely outlasts this script's own module-load
     // timing, so the very first attempt failing is expected, not an error.
+    //
+    // HOST-03B Member Identity Diagnostic V1 -- temporary, read-only,
+    // dev-gated (`import.meta.env.DEV` -- this file, unlike homeRuntime.ts,
+    // ships in the real BLACKBOOK production bundle, so the gate is
+    // required here). Logs each attempt's own granted/denied result and
+    // the terminal outcome, with zero change to the resolution logic
+    // itself -- the loop body below is unchanged, only wrapped with a log
+    // line before/after. See getMemberIdentity's own matching diagnostic
+    // in homeRuntime.ts for the HOME-side half of this same trace.
     for (let attempt = 0; attempt < 100; attempt += 1) {
       const authority = host.getMemberIdentity(document, identity);
+      if (import.meta.env.DEV) console.log("[HOST-03B Member Identity Diagnostic] resolveHostedAuthority attempt", { attempt, granted: authority !== null, identity });
       if (authority) {
         resolved = authority;
         resolved.subscribe(setState);
         await resolved.start();
+        if (import.meta.env.DEV) console.log("[HOST-03B Member Identity Diagnostic] resolveHostedAuthority resolved", { attempt, finalState: current });
         return;
       }
       await wait(50);
@@ -108,6 +119,7 @@ export function createHostAwareMemberIdentity(
     // avoid, and would mean two live authorities disagreeing about who is
     // signed in.
     setState({ status: "error", authUser: null, member: null, error: hostUnavailableError("stale_identity") });
+    if (import.meta.env.DEV) console.log("[HOST-03B Member Identity Diagnostic] resolveHostedAuthority exhausted retries -- settled to error/stale_identity", { identity });
   }
 
   return {

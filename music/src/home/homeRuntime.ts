@@ -160,8 +160,41 @@ function getRadioSession(source: Document, identity: HomeMountIdentity): RadioCh
 // through this gated bridge function -- it IS the active/owning context,
 // not a hosted surface asking permission.
 const memberSessionManager = createHomeMemberSessionManager();
+/**
+ * HOST-03B Member Identity Diagnostic V1 -- temporary, read-only, dev-only
+ * (this whole module already fails closed outside DEV, see the top-of-
+ * file guard). Logs each individual `activeMount` predicate on every call
+ * -- `activeMount` itself is called UNCHANGED, exactly as before; this
+ * only ALSO separately re-derives the same sub-conditions for the log
+ * line, so the diagnostic can never alter which branch runs. Added
+ * because physical HOST-03B acceptance found hosted BLACKBOOK staying
+ * unauthorized despite phase/runtimeId/navigationId all externally
+ * confirmed matching via the `#diagnostics` panel and the iframe's own
+ * URL -- none of which expose `expectedDocument(source)`'s own two sub-
+ * checks (`currentDocument`/`source.URL === expectedUrl`), the one
+ * remaining unverified predicate.
+ */
 function getMemberIdentity(source: Document, identity: HomeMountIdentity): MemberIdentityAuthority | null {
-  if (!activeMount(source, identity)) return null;
+  const granted = activeMount(source, identity);
+  const state = navigation.getState();
+  const sourceIsCurrentDocument = currentDocument(source);
+  const sourceUrl = (() => { try { return source.URL; } catch (error) { return `<unreadable:${String(error)}>`; } })();
+  console.log("[HOST-03B Member Identity Diagnostic] getMemberIdentity", {
+    granted,
+    phase: state.phase,
+    phaseActive: state.phase === "active",
+    sourceIsCurrentDocument,
+    sourceUrl,
+    expectedUrl,
+    urlMatch: sourceUrl === expectedUrl,
+    stateRuntimeId: state.runtimeId,
+    identityRuntimeId: identity.runtimeId,
+    runtimeIdMatch: state.runtimeId === identity.runtimeId,
+    stateNavigationId: state.navigationId,
+    identityNavigationId: identity.navigationId,
+    navigationIdMatch: state.navigationId === identity.navigationId,
+  });
+  if (!granted) return null;
   return memberSessionManager.acquire();
 }
 const api: HomeSurfaceHost = Object.freeze({
