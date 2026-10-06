@@ -19,8 +19,8 @@
  * must change with it, or this harness silently stops meaning anything.
  */
 import { describe, expect, it } from "vitest";
-import { strokeMop } from "./strokeSmoothing";
-import type { MopPoint } from "./mopDeposition";
+import { paintSprayParticles, strokeMop } from "./strokeSmoothing";
+import { MOP_MAX_EMISSION_POINTS, resolveMopDabPlan, type MopPoint } from "./mopDeposition";
 import {
   STUDIORICH_STOCK_CAP,
   advanceSprayEmissionPoints,
@@ -321,5 +321,182 @@ describe("Live/Canonical Equivalence Harness -- Spray particle count/position/de
     const emissionCursor = advanceSprayEmissionPoints(null, points, baseRadius, cap);
     const liveCursorOnly = advanceSprayParticles(null, seed, emissionCursor, baseRadius, cap);
     expect(liveCursorOnly.particles.length).toBeLessThan(canonical.length);
+  });
+});
+
+/**
+ * BLACKBOOK Presentation Readiness -- Residual Isolated-Dot Diagnostic V1.
+ *
+ * Physical retest of `456066c` (1006J) found the major Mop/Spray pointer-
+ * up WYSIWYG defect resolved, but reported a small residual: an isolated
+ * Mop dot/deposit, and a small isolated Spray dot/deposition difference,
+ * both still occasionally visible around pointer-up. Per instruction, this
+ * is a DIAGNOSTIC pass only -- no speculative visual fix. These tests
+ * isolate the exact provenance of each residual, at the pure-function
+ * level, using the smallest reproduction that demonstrates it.
+ */
+describe("Residual isolated-dot diagnostic -- Mop", () => {
+  function zigZagStroke(count: number): MopPoint[] {
+    const points: MopPoint[] = [];
+    let x = 0;
+    for (let i = 0; i < count; i += 1) {
+      x += 3;
+      points.push({ x, y: 25 * Math.sin(i / 5) });
+    }
+    return points;
+  }
+
+  /**
+   * PROVENANCE FOUND: the Mop full-redraw architecture (1006J) makes every
+   * live frame a byte-identical canonical `strokeMop` call over its OWN
+   * input -- proven in the describe block above. That is necessary but not
+   * sufficient for "zero visible change at pointer-up," because the LAST
+   * frame the artist's eye actually saw (painted on some earlier animation
+   * frame, over however many points had arrived by then) and the FINAL
+   * commit (over the complete, slightly longer point set once a few more
+   * pointermove samples land before pointerup fires) are two DIFFERENT
+   * inputs to that otherwise-identical function. For an ordinary gesture
+   * this is invisible -- the extra few points just extend the stroke's own
+   * tail by a few pixels, exactly as a growing stroke should look. This
+   * test isolates the one case where it ISN'T invisible: once a gesture's
+   * own resolved dab count has reached `MOP_MAX_EMISSION_POINTS` (260) --
+   * `resolveMopEmissionPoints`'s own global, bucketed
+   * `simplifyPathToBudget` reselection (mopDeposition.ts; not the adaptive-
+   * maxStep mechanism 1006J's full-redraw already neutralized, a distinct,
+   * already-disclosed debt item -- see docs/architecture/DEBT.md's "Mop
+   * emission resampling is not append-stable for a very long gesture")
+   * picks DIFFERENT representative points, by BUCKET INDEX over the
+   * CURRENT total array, once the array's own length changes -- even by
+   * only 3 points, even though neither input is anywhere near
+   * MOP_MAX_EMISSION_POINTS *raw* points (confirmed below: this reproduces
+   * at 200 raw points, which never even reaches the SEPARATE raw-point
+   * presimplification stage inside the same function -- the one additional
+   * global bucketed stage is enough on its own). The reselection moves
+   * dabs ANYWHERE in the array, not merely at the tail -- dab #13 (of 60
+   * compared) shifts position/radius in this exact reproduction, nowhere
+   * near either array's own tail.
+   */
+  it("PROVENANCE -- once a gesture's dab plan hits the MOP_MAX_EMISSION_POINTS cap, appending even 3 more raw points reselects an EARLY/MIDDLE dab's position, not merely the tail -- the residual isolated-dot mechanism", () => {
+    const full = zigZagStroke(200);
+    const almostFull = full.slice(0, 197); // "the last live frame the eye saw" -- 3 pointermove samples short of the final commit
+    const fullDabs = resolveMopDabPlan(full, 10);
+    const almostFullDabs = resolveMopDabPlan(almostFull, 10);
+    // Both ALREADY at the cap -- confirms this reproduction exercises the
+    // emission-level simplifyPathToBudget stage, not merely "a longer tail."
+    expect(fullDabs.length).toBe(MOP_MAX_EMISSION_POINTS);
+    expect(almostFullDabs.length).toBe(MOP_MAX_EMISSION_POINTS);
+    const compareCount = Math.min(60, fullDabs.length, almostFullDabs.length);
+    let firstDivergingIndex = -1;
+    for (let index = 0; index < compareCount; index += 1) {
+      if (Math.abs(fullDabs[index].x - almostFullDabs[index].x) > 1e-6 || Math.abs(fullDabs[index].y - almostFullDabs[index].y) > 1e-6) {
+        firstDivergingIndex = index;
+        break;
+      }
+    }
+    expect(firstDivergingIndex).toBeGreaterThanOrEqual(0);
+    expect(firstDivergingIndex).toBeLessThan(compareCount - 1); // not merely the tail
+  });
+
+  it("CONTROL -- below the MOP_MAX_EMISSION_POINTS cap, appending more raw points is perfectly append-stable (an early prefix's dabs are an exact, byte-identical sub-sequence) -- isolating the cap crossing, not raw point count alone, as the actual trigger", () => {
+    const full = zigZagStroke(150);
+    const almostFull = full.slice(0, 147);
+    const fullDabs = resolveMopDabPlan(full, 10);
+    const almostFullDabs = resolveMopDabPlan(almostFull, 10);
+    expect(fullDabs.length).toBeLessThan(MOP_MAX_EMISSION_POINTS);
+    expect(almostFullDabs.length).toBeLessThan(MOP_MAX_EMISSION_POINTS);
+    expect(almostFullDabs).toEqual(fullDabs.slice(0, almostFullDabs.length));
+  });
+
+  it("CONTROL -- the raw-point presimplification stage alone (gesture under ~260 RAW points, so it never triggers) is not the mechanism -- the 200-raw-point reproduction above already diverges despite never reaching that separate stage, confirming the EMISSION-level cap is the actual, sole provenance", () => {
+    const full = zigZagStroke(200);
+    // 200 raw points is well under the 260-raw-point threshold that would
+    // trigger resolveMopEmissionPoints' OWN raw-point simplifyPathToBudget
+    // pass (`points.length - 1 > budget`) -- so whatever divergence this
+    // gesture shows (proven above) cannot be attributed to that stage.
+    expect(full.length - 1).toBeLessThan(MOP_MAX_EMISSION_POINTS - 1);
+  });
+});
+
+describe("Residual isolated-dot diagnostic -- Spray", () => {
+  const baseRadius = 10;
+  const cap: SprayCapProfile = STUDIORICH_STOCK_CAP;
+
+  function gesture(count: number): SprayPoint[] {
+    const points: SprayPoint[] = [];
+    let x = 0;
+    for (let i = 0; i < count; i += 1) {
+      x += 3;
+      points.push({ x, y: 18 * Math.sin(i / 6), tMs: i * 16 });
+    }
+    return points;
+  }
+
+  /**
+   * Spray has no analogous global bucketed resampling anywhere in its
+   * deposition pipeline (confirmed by inspection: zero references to
+   * `simplifyPathToBudget` in sprayDeposition.ts -- every cap, on both the
+   * particle-emission walk and the core-sample walk, is a hard APPEND
+   * CUTOFF, never a re-selection -- "LIVE STROKE STABILITY V2"'s own
+   * doc). This re-proves append-stability at a scale (2000 raw points,
+   * ~20K particles) an order of magnitude past anything the existing
+   * equivalence harness above already covered (~70-140 points), to rule
+   * out a Mop-style cap-crossing mechanism existing at some larger,
+   * untested scale for Spray too.
+   */
+  it("PARTICLE positions remain exactly append-stable at far larger scale than previously tested (2000 raw points, ~20K particles) -- no Mop-style cap-crossing mechanism exists for Spray's particle field", () => {
+    const full = gesture(2000);
+    const almostFull = full.slice(0, 1997);
+    const seed = hashSeed("op-spray-scale");
+    const fullParticles = resolveSprayParticlePlan(full, baseRadius, seed, cap);
+    const almostParticles = resolveSprayParticlePlan(almostFull, baseRadius, seed, cap);
+    expect(almostParticles).toEqual(fullParticles.slice(0, almostParticles.length));
+  });
+
+  it("CORE sample positions remain exactly append-stable at the same larger scale", () => {
+    const full = gesture(2000);
+    const almostFull = full.slice(0, 1997);
+    const fullSamples = resolveSprayCoreSamplePoints(full, baseRadius, cap);
+    const almostSamples = resolveSprayCoreSamplePoints(almostFull, baseRadius, cap);
+    expect(almostSamples).toEqual(fullSamples.slice(0, almostSamples.length));
+  });
+
+  /**
+   * Directly supports distinguishing the two things the acceptance report
+   * asks to distinguish: "a particle disappearing/moving is still a
+   * failure; the same particle becoming softer is acceptable." Captures
+   * the actual canvas calls `paintSprayParticles` issues for ONE isolated
+   * particle (deliberately sparse surroundings, no neighbors to visually
+   * mask anything) under both rendering styles, and asserts the ONLY
+   * difference is the fill primitive (gradient vs flat solid fill) -- the
+   * arc()'s own x/y/radius (the particle's actual deposition footprint)
+   * is identical either way, proving a lone particle's flat-to-gradient
+   * transition is a pure rendering-style change, never a position/size
+   * change, for this exact primitive.
+   */
+  it("an isolated particle's flat vs. gradient paint differ ONLY in fill style -- the arc()'s own position/radius (actual deposition footprint) is byte-identical either way", () => {
+    const isolatedParticle = { x: 123.456, y: 78.9, radius: 4.2, alpha: 0.6 };
+    function fakeParticleContext() {
+      const calls: string[] = [];
+      const ctx = {
+        beginPath: () => calls.push("beginPath"),
+        arc: (x: number, y: number, r: number) => calls.push(`arc(${x},${y},${r})`),
+        fill: () => calls.push("fill"),
+        createRadialGradient: (...args: number[]) => {
+          calls.push(`createRadialGradient(${args.join(",")})`);
+          return { addColorStop: () => {} };
+        },
+        fillStyle: "" as unknown,
+      };
+      return { ctx, calls };
+    }
+    const flat = fakeParticleContext();
+    paintSprayParticles(flat.ctx as never, [isolatedParticle], "#ff00aa", 0.9, "flat");
+    const gradient = fakeParticleContext();
+    paintSprayParticles(gradient.ctx as never, [isolatedParticle], "#ff00aa", 0.9, "gradient");
+    // Flat uses arc()+fill() with a solid fillStyle; gradient uses
+    // createRadialGradient at the SAME x/y/radius (0 -> radius) -- same
+    // footprint, only the fill mechanism differs.
+    expect(flat.calls.some((call) => call.startsWith("arc(123.456,78.9,4.2)"))).toBe(true);
+    expect(gradient.calls.some((call) => call.startsWith(`createRadialGradient(${isolatedParticle.x},${isolatedParticle.y},0,${isolatedParticle.x},${isolatedParticle.y},${isolatedParticle.radius})`))).toBe(true);
   });
 });

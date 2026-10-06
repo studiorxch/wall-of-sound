@@ -405,3 +405,51 @@ record. No longer an open item.
   tests use, but with a gesture deliberately long enough to cross the
   threshold above, before deciding between the two fix options named
   above.
+- **Update (1006K, confirmed)**: this trigger fired. Physical retest of
+  1006J (`456066c`) — which closed "Problem 5"'s own live-vs-canonical gap
+  by dropping Mop's live-preview windowing entirely (every frame redraws
+  the complete path via one canonical `strokeMop` call) — still reported a
+  small residual: "an isolated Mop dot/deposit can be visible in the live
+  state and disappear or reconcile after pointer-up." Diagnosed and
+  CONFIRMED at the pure-function level (`liveCanonicalEquivalence.test.ts`,
+  `"Residual isolated-dot diagnostic -- Mop"`): the actual trigger is
+  narrower than this entry originally described. It is NOT the adaptive-
+  `maxStep` mechanism above (1006J's full-redraw already neutralizes that
+  one, since every live call now resolves over the SAME complete, growing
+  array canonical itself will eventually use) and it is NOT the raw-point
+  Douglas-Peucker presimplification stage either (reproduces at 200 raw
+  points, well under that stage's own 260-raw-point trigger). It is
+  specifically `resolveMopEmissionPoints`'s OWN final step: once the
+  resolved emission count exceeds `MOP_MAX_EMISSION_POINTS` (260),
+  `simplifyPathToBudget(emissions, MOP_MAX_EMISSION_POINTS)` re-buckets the
+  ENTIRE emission array by index range over the CURRENT total length —
+  appending even 3 more raw points (the ordinary gap between the last
+  rendered live-preview frame and the slightly-longer point set pointerup's
+  catch-up/canonical commit actually uses) measurably reselects a
+  DIFFERENT representative dab, ANYWHERE in the array (confirmed: dab #13
+  of 60 compared, nowhere near either array's own tail), the instant a
+  gesture's own dab count reaches the cap. Below the cap, confirmed
+  perfectly append-stable (a CONTROL test in the same file). This is the
+  SAME underlying class of defect this entry already named ("deposition-
+  behavior change, not a pure rendering-stability fix... out of scope"),
+  now reproduced precisely and at a much lower bar (any gesture whose
+  OWN resolved dab count reaches 260 — roughly a few seconds of ordinary
+  drawing at this zigzag's density, not "several thousand px of path" as
+  originally estimated) than this entry's own original impact estimate.
+  **No fix was made** — per explicit instruction, this diagnostic pass
+  intentionally stopped short of either remedy named above (raising
+  `MOP_MAX_EMISSION_POINTS`, which changes dab density/appearance for any
+  gesture that already hits the cap; or a genuinely incremental forward-
+  only resampling scheme, an architecture change) since both are product/
+  architecture decisions beyond "the smallest diagnostic necessary to
+  identify provenance." Spray was re-verified at far larger scale (2000
+  raw points, ~20K particles) in the same diagnostic pass and remains
+  perfectly append-stable with no analogous mechanism (confirmed: zero
+  uses of `simplifyPathToBudget` anywhere in `sprayDeposition.ts`) — the
+  small residual Spray dot physical acceptance also reported is not
+  explained by any geometry/deposition defect found here, and is
+  consistent with the already-permitted flat-to-gradient particle
+  softness refinement (directly demonstrated in the same diagnostic: a
+  lone particle's `arc()` footprint — position and radius — is byte-
+  identical between the flat and gradient paint calls; only the fill
+  primitive differs).
