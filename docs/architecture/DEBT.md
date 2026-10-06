@@ -466,3 +466,69 @@ record. No longer an open item.
   `DEBT.md` (status unchanged: not fixed) — it is accepted as a known,
   bounded limitation, not closed. Revisit trigger unchanged: either named
   remedy, whenever separately authorized and scoped.
+
+---
+
+### BLACKBOOK Mop live-preview fine banding, reported on legacy iPadOS 16.7.16 + Apple Pencil — not reproduced on a currently supported platform, not yet actionable
+
+- **Problem**: physical acceptance on an iPad Pro running **iPadOS
+  16.7.16** (an older OS/WebKit environment) with Apple Pencil found a
+  live-preview defect distinct from the emission-cap entry above: during
+  an active Mop stroke, the deposited width visibly resolves into
+  extremely fine (~1px) bands/segments across the stroke — far finer-
+  grained than the already-fixed window/bucket-reselection defects — and
+  resolves to the correct solid canonical body the instant the Pencil
+  lifts. Mouse testing on the same accepted HEAD never exposed this.
+- **Structural risk, independently confirmed (code-level, not device-
+  specific)**: `blackbookRuntime.ts`'s `activePoints` has no raw-point
+  cap for Mop, unlike Spray's own `MAX_SPRAY_RAW_POINTS` — and
+  `strokeMop`'s body pass (`strokeSmoothing.ts`) strokes that raw,
+  un-resampled point array directly, re-stroked on every live-preview
+  animation frame (1006J's own full-redraw architecture). Apple Pencil's
+  `getCoalescedEvents()` stream is far denser than mouse input, so this
+  path can genuinely grow much larger/denser under Pencil input than
+  anything mouse testing ever produced. This part of the diagnosis is a
+  real, device-independent architectural characteristic, not a guess.
+- **Visual root cause: NOT yet demonstrated.** The dense-point-count
+  structural risk above explains why Apple Pencil COULD produce a
+  different live-preview workload than mouse; it does not by itself
+  prove that workload is what causes the specific visible banding
+  artifact. Distinguishing an architectural/performance characteristic
+  from a legacy-WebKit-specific rasterization quirk requires either
+  reproduction on a currently supported iPadOS/WebKit device, or
+  device-independent measurements (via the diagnostic below) showing a
+  sufficiently severe workload/performance problem to justify a fix on
+  performance grounds alone, independent of the visual artifact.
+- **Current status**: recorded, NOT closed as fixed, and explicitly NOT
+  made a condition of current-platform physical acceptance. iPadOS
+  16.7.16 is an older OS/WebKit environment than BLACKBOOK's currently
+  supported platform set; a rendering quirk specific to that legacy
+  environment is not grounds to change the production Mop renderer for
+  every platform, including ones where Mop/Spray were already physically
+  accepted (see 1006L). **No production rendering change has been made
+  or is pending from this finding alone.**
+- **Diagnostic instrumentation available, not yet run to completion**:
+  `window.__blackbookMopPencilDiagnostics` (added in commit `01f2feb`,
+  dev-only, disabled by default, one-shot `console.log` at `pointerup`)
+  measures total raw points, coalesced samples per `pointermove`,
+  inter-point spacing, approximate path length, live-redraw count,
+  max/median raw body points per live redraw, the final canonical body
+  point count, and independent frame-timing deltas — see that commit's
+  own doc comment in `blackbookRuntime.ts` for exactly what it measures
+  and how to arm it. Not yet exercised against a real gesture on any
+  device as of this entry.
+- **Revisit trigger (either closes this as a real, device-independent
+  problem, or closes it as a legacy-environment-only artifact not worth
+  chasing)**:
+  1. Reproduce the same visible banding on a currently supported
+     iPadOS/WebKit version (not 16.7.16) with Apple Pencil, OR
+  2. Run the `01f2feb` diagnostic on BOTH a Pencil gesture and a
+     comparable mouse gesture and find a workload/performance disparity
+     severe enough (sustained dropped frames, not merely a larger point
+     count) to justify a minimum-spacing decimation on performance
+     grounds alone, independent of whether the visual artifact itself is
+     reproducible on a supported platform.
+  Until one of these holds, production rendering stays unchanged — no
+  minimum-spacing decimation, no change to Mop geometry/deposition/
+  sampling, and the accepted Mop/Spray physical-acceptance baseline
+  (1006L) stands as-is.
