@@ -793,6 +793,73 @@ describe("strokeMop -- Mop Material Calibration V1", () => {
       expect(explicitUndefined.ctx.lineCap).toBe(withoutOptions.ctx.lineCap);
     });
   });
+
+  /**
+   * BLACKBOOK Presentation Readiness -- Mop Dab-Duplication Seam Fix V1.
+   * Proves the ACTUAL runtime paint call -- not merely the dab-plan
+   * computation `simulateWindowedDabs` (mopDeposition.test.ts) already
+   * proved equivalent -- stops double-painting the shared boundary dab.
+   * Simulates `advanceMopLivePreview`'s own exact sequence: window A's
+   * full resolved dabs painted as-is (the gesture's first window, nothing
+   * to drop), then window B's resolved dabs with its own duplicated first
+   * dab sliced off before being passed to `strokeMop`'s own `dabs` option
+   * -- exactly what blackbookRuntime.ts now does.
+   */
+  describe("windowed live-preview paint call -- Mop Dab-Duplication Seam Fix V1", () => {
+    const longPoints = [
+      { x: 0, y: 0 }, { x: 20, y: 6 }, { x: 44, y: 14 }, { x: 70, y: 10 },
+      { x: 96, y: 22 }, { x: 118, y: 30 }, { x: 140, y: 18 }, { x: 168, y: 26 },
+    ];
+
+    it("painting window A, then window B with its own duplicated first dab dropped, never repeats an arc() draw the canonical complete-gesture call wouldn't also produce exactly once", () => {
+      const baseRadius = style.width * 0.5;
+      const windowA = longPoints.slice(0, 4);
+      const windowB = longPoints.slice(3); // shares longPoints[3] with window A's own last point
+
+      const dabsA = resolveMopDabPlan(windowA, baseRadius, 0);
+      const a = fakeMopContext();
+      strokeMop(a.ctx as never, windowA, style, "mark-a", { dabs: dabsA, lineCap: "butt" });
+
+      const ordinalOffsetAfterA = dabsA.length; // isFirstWindow -- nothing subtracted, matches blackbookRuntime.ts
+      const dabsB = resolveMopDabPlan(windowB, baseRadius, ordinalOffsetAfterA);
+      const dabsBToPaint = dabsB.slice(1); // the fix: drop the duplicated shared-boundary dab before painting
+      const b = fakeMopContext();
+      strokeMop(b.ctx as never, windowB, style, "mark-a", { dabs: dabsBToPaint, lineCap: "butt" });
+
+      const arcCallsA = a.calls.filter((call) => call.startsWith("arc("));
+      const arcCallsB = b.calls.filter((call) => call.startsWith("arc("));
+      const combined = [...arcCallsA, ...arcCallsB];
+
+      const canonical = fakeMopContext();
+      strokeMop(canonical.ctx as never, longPoints, style, "mark-a");
+      const canonicalArcCalls = canonical.calls.filter((call) => call.startsWith("arc("));
+
+      expect(combined).toEqual(canonicalArcCalls);
+    });
+
+    it("regression guard: painting window B's FULL (undeduplicated) dabs -- the pre-fix behavior -- produces one extra arc() draw versus canonical, proving the fix is load-bearing, not a no-op", () => {
+      const baseRadius = style.width * 0.5;
+      const windowA = longPoints.slice(0, 4);
+      const windowB = longPoints.slice(3);
+
+      const dabsA = resolveMopDabPlan(windowA, baseRadius, 0);
+      const a = fakeMopContext();
+      strokeMop(a.ctx as never, windowA, style, "mark-a", { dabs: dabsA, lineCap: "butt" });
+
+      const dabsB = resolveMopDabPlan(windowB, baseRadius, dabsA.length);
+      const bUnfixed = fakeMopContext();
+      strokeMop(bUnfixed.ctx as never, windowB, style, "mark-a", { dabs: dabsB, lineCap: "butt" }); // no .slice(1) -- the bug
+
+      const arcCallsA = a.calls.filter((call) => call.startsWith("arc("));
+      const arcCallsBUnfixed = bUnfixed.calls.filter((call) => call.startsWith("arc("));
+
+      const canonical = fakeMopContext();
+      strokeMop(canonical.ctx as never, longPoints, style, "mark-a");
+      const canonicalArcCalls = canonical.calls.filter((call) => call.startsWith("arc("));
+
+      expect(arcCallsA.length + arcCallsBUnfixed.length).toBe(canonicalArcCalls.length + 1);
+    });
+  });
 });
 
 describe("strokeSpray -- Spray Material Calibration V1", () => {

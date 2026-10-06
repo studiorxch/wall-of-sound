@@ -6,8 +6,10 @@ import {
   finalizeSprayParticles,
   hashSeed,
   resolveSprayCapProfile,
+  resolveSprayCoreJitter,
   resolveSprayCorePlan,
   resolveSprayCoreSamplePoints,
+  resolveSprayCoreStatistics,
   resolveSprayDripPlans,
   resolveSprayEmissionPoints,
   resolveSprayParticlePlan,
@@ -261,6 +263,104 @@ describe("Spray core plan -- Revision 4 (continuous per-pass strokes, replaces R
       const lastPoint = pass.points[pass.points.length - 1];
       expect(Math.hypot(lastPoint.x - finalAuthored.x, lastPoint.y - finalAuthored.y)).toBeLessThanOrEqual(maxJitter);
     }
+  });
+});
+
+/**
+ * BLACKBOOK Presentation Readiness -- Spray Windowed Core-Pass Consistency
+ * Fix V1. `resolveSprayCorePlan`'s own doc explains the defect: mean
+ * density/flow and travel angle are genuinely window-local averages, so a
+ * live preview calling this function WINDOWED (one trailing slice of
+ * points per frame, same pattern Mop's body pass used) got a different
+ * core-pass width/alpha/angle on every window -- snapping to canonical's
+ * own whole-gesture values only once pointer-up (Mop) or the background
+ * bake (Spray) replaced it. These tests prove the override mechanism
+ * actually closes that gap, not merely that it exists.
+ */
+describe("Spray core plan -- Windowed Core-Pass Consistency Fix V1", () => {
+  it("resolveSprayCoreJitter is a pure function of (seed, effectiveRadius, cap, passes) -- identical whether drawn fresh once or many times, exactly the property a windowed live-preview call sequence depends on", () => {
+    const seed = hashSeed("jitter-purity");
+    const cap = STUDIORICH_STOCK_CAP;
+    const effectiveRadius = 12 * cap.footprintRadiusScale;
+    const first = resolveSprayCoreJitter(seed, effectiveRadius, cap, cap.corePasses);
+    const second = resolveSprayCoreJitter(seed, effectiveRadius, cap, cap.corePasses);
+    const third = resolveSprayCoreJitter(seed, effectiveRadius, cap, cap.corePasses);
+    expect(second).toEqual(first);
+    expect(third).toEqual(first);
+  });
+
+  it("resolveSprayCoreStatistics's own jitter matches what resolveSprayCorePlan draws internally when given no override at all -- the override path and the default path compute the identical thing", () => {
+    const points = [{ x: 0, y: 0 }, { x: 40, y: 8 }, { x: 88, y: 20 }, { x: 120, y: 16 }];
+    const baseRadius = 14;
+    const seed = hashSeed("jitter-matches-internal");
+    const cap = STUDIORICH_STOCK_CAP;
+    const noOverride = resolveSprayCorePlan(points, baseRadius, seed, cap);
+    const stats = resolveSprayCoreStatistics(points, baseRadius, seed, cap);
+    const withExplicitOverride = resolveSprayCorePlan(points, baseRadius, seed, cap, stats);
+    expect(withExplicitOverride).toEqual(noOverride);
+  });
+
+  it("THE KEY EQUIVALENCE CLAIM: a windowed live-preview call sequence, where each window computes its own coreOverride from the GROWING COMPLETE point set (never the windowed slice), produces a FINAL-window core plan identical to one canonical call over the complete gesture -- 'the pixels immediately before pointer-up' now matches 'the pixels after'", () => {
+    const gesture = [
+      { x: 0, y: 0 }, { x: 20, y: 6 }, { x: 44, y: 14 }, { x: 70, y: 10 },
+      { x: 96, y: 22 }, { x: 118, y: 30 }, { x: 140, y: 18 }, { x: 168, y: 26 },
+      { x: 190, y: 12 }, { x: 214, y: 20 },
+    ];
+    const baseRadius = 16;
+    const seed = hashSeed("final-window-matches-canonical");
+    const cap = STUDIORICH_CALLIGRAPHY_CAP; // directionalResponse > 0 -- exercises travelAngle too, not just mean density/flow
+
+    // Simulate advanceSprayLivePreview's own exact sequence: windows of
+    // size 3 (with the usual 1-point overlap), each window computing its
+    // OWN coreOverride from screenPoints.slice(0, however-far-we-are) --
+    // the COMPLETE gesture-so-far, never the windowed slice passed as
+    // `points` to resolveSprayCorePlan itself.
+    let liveBakedPointCount = 0;
+    let lastPlan: ReturnType<typeof resolveSprayCorePlan> = [];
+    const frameSize = 3;
+    while (liveBakedPointCount < gesture.length) {
+      const nextBaked = Math.min(gesture.length, liveBakedPointCount + frameSize);
+      const windowStart = Math.max(0, liveBakedPointCount - 1);
+      const windowPoints = gesture.slice(windowStart, nextBaked);
+      liveBakedPointCount = nextBaked;
+      if (windowPoints.length < 2) continue;
+      const completeSoFar = gesture.slice(0, liveBakedPointCount);
+      const override = resolveSprayCoreStatistics(completeSoFar, baseRadius, seed, cap);
+      lastPlan = resolveSprayCorePlan(windowPoints, baseRadius, seed, cap, override);
+    }
+
+    // The FINAL window's own windowPoints is gesture's own tail, not the
+    // complete gesture -- so lastPlan's own POSITIONS differ from
+    // canonical's (which draws over the complete points). What must match
+    // is everything the override governs: width (meanDensity-derived) and
+    // alpha (meanFlow-derived) should be IDENTICAL to canonical's own,
+    // since by the final window completeSoFar === the complete gesture.
+    const canonical = resolveSprayCorePlan(gesture, baseRadius, seed, cap);
+    expect(lastPlan.length).toBe(canonical.length);
+    for (let i = 0; i < canonical.length; i += 1) {
+      expect(lastPlan[i].width).toBeCloseTo(canonical[i].width, 10);
+      expect(lastPlan[i].alpha).toBeCloseTo(canonical[i].alpha, 10);
+    }
+  });
+
+  it("regression guard: WITHOUT the override (the pre-fix behavior), a windowed call's width/alpha genuinely differs from canonical's own -- proving the defect this fix closes was real, not hypothetical", () => {
+    // An unevenly-paced gesture (a tight, slow cluster followed by a long,
+    // fast dash) -- deliberately chosen so a small window's own local mean
+    // density/flow differs substantially from the complete gesture's.
+    const gesture = [
+      { x: 0, y: 0 }, { x: 2, y: 1 }, { x: 4, y: 0 }, { x: 5, y: 2 }, // slow/dense cluster
+      { x: 300, y: 40 }, { x: 600, y: 10 }, // then a long fast dash
+    ];
+    const baseRadius = 16;
+    const seed = hashSeed("regression-guard-mean-drift");
+    const cap = STUDIORICH_STOCK_CAP;
+
+    const firstWindowPoints = gesture.slice(0, 4); // the slow/dense cluster only
+    const unfixedFirstWindow = resolveSprayCorePlan(firstWindowPoints, baseRadius, seed, cap); // no override -- old behavior
+    const canonical = resolveSprayCorePlan(gesture, baseRadius, seed, cap);
+
+    const widthsDiffer = unfixedFirstWindow.some((pass, i) => Math.abs(pass.width - canonical[i].width) > 1e-6);
+    expect(widthsDiffer).toBe(true);
   });
 });
 

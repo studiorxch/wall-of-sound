@@ -19,7 +19,7 @@
  * authored geometry itself. The persisted Mark's points are never touched.
  */
 
-import { hashSeed, resolveSprayCorePlan, resolveSprayParticlePlan, STUDIORICH_STOCK_CAP, type SprayCapProfile, type SprayParticle } from "./sprayDeposition";
+import { hashSeed, resolveSprayCorePlan, resolveSprayParticlePlan, STUDIORICH_STOCK_CAP, type SprayCapProfile, type SprayCorePlanOverride, type SprayParticle } from "./sprayDeposition";
 import { resolveMopDabPlan, type MopDab } from "./mopDeposition";
 
 export interface SmoothablePoint {
@@ -778,6 +778,14 @@ export interface StrokeSprayOptions {
    */
   readonly coreLineCap?: CanvasLineCap;
   /**
+   * BLACKBOOK Presentation Readiness -- Spray Windowed Core-Pass
+   * Consistency Fix V1 -- see `resolveSprayCorePlan`'s own doc for the
+   * full mechanism. Threaded straight through to that function's own
+   * `override` parameter; omitted (the default) for every pre-existing
+   * caller, byte-identical to before this option existed.
+   */
+  readonly coreOverride?: SprayCorePlanOverride;
+  /**
    * SPRAY POINTER-UP RECONCILIATION V1 -- when supplied, `strokeSpray`
    * paints EXACTLY this particle list instead of calling
    * `resolveSprayParticlePlan` itself. The live preview (via its own
@@ -829,7 +837,7 @@ export function strokeSpray(
   ctx.globalCompositeOperation = "source-over";
   ctx.lineCap = options?.coreLineCap ?? "round";
   ctx.lineJoin = "round";
-  for (const pass of resolveSprayCorePlan(points, baseRadius, seed, cap)) {
+  for (const pass of resolveSprayCorePlan(points, baseRadius, seed, cap, options?.coreOverride)) {
     if (pass.points.length < 2) continue;
     ctx.globalAlpha = style.opacity * pass.alpha;
     ctx.strokeStyle = style.color;

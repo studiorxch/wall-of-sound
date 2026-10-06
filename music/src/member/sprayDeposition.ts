@@ -1016,6 +1016,90 @@ export interface SprayCorePass {
   readonly alpha: number;
 }
 
+/** One pass's own deterministic jitter draw -- see `resolveSprayCoreJitter`'s own doc. */
+export interface SprayCoreJitter {
+  readonly jitterX: number;
+  readonly jitterY: number;
+  readonly widthJitter: number;
+}
+
+/**
+ * BLACKBOOK Presentation Readiness -- Spray Windowed Core-Pass Consistency
+ * Fix V1. Extracted from `resolveSprayCorePlan`'s own former inline loop
+ * body, same values, same draw order, same `createSeededRandom(seed)`
+ * stream -- a caller that never supplies `resolveSprayCorePlan`'s own
+ * `override.jitter` gets this exact function called internally, so every
+ * pre-existing caller (canonical commit, reload, the background bake) is
+ * byte-identical to before this existed.
+ *
+ * Exists as its own callable function purely so `resolveSprayCoreStatistics`
+ * can hand back ONE complete, self-contained bundle of every whole-
+ * gesture-scoped scalar `resolveSprayCorePlan` needs -- jitter included --
+ * rather than mixing a genuinely-windowed-inconsistent value
+ * (`meanDensity`/`meanFlow`/`travelAngle`, see `resolveSprayCorePlan`'s
+ * own doc) with one that was already window-order-independent by
+ * construction: `createSeededRandom(seed)` with the SAME seed always
+ * produces the SAME first-N draws no matter how many separate times it's
+ * constructed, so this value never actually varied window to window.
+ */
+export function resolveSprayCoreJitter(
+  seed: number,
+  effectiveRadius: number,
+  cap: SprayCapProfile,
+  passes: number,
+): readonly SprayCoreJitter[] {
+  const random = createSeededRandom(seed);
+  const result: SprayCoreJitter[] = [];
+  for (let pass = 0; pass < passes; pass += 1) {
+    result.push({
+      jitterX: (random() - 0.5) * effectiveRadius * cap.coreJitterRatio,
+      jitterY: (random() - 0.5) * effectiveRadius * cap.coreJitterRatio,
+      widthJitter: 1 + (random() - 0.5) * cap.coreWidthJitterRatio,
+    });
+  }
+  return result;
+}
+
+/**
+ * BLACKBOOK Presentation Readiness -- Spray Windowed Core-Pass Consistency
+ * Fix V1. `resolveSprayCorePlan` accepts this as an optional override so a
+ * caller can supply whole-gesture-scoped statistics (jitter, mean density/
+ * flow, travel angle) instead of letting the function recompute them from
+ * whatever (possibly windowed) `points` it was given -- see that
+ * function's own doc for the defect this closes.
+ */
+export interface SprayCorePlanOverride {
+  readonly jitter?: readonly SprayCoreJitter[];
+  readonly meanDensity?: number;
+  readonly meanFlow?: number;
+  readonly travelAngle?: number;
+}
+
+/**
+ * BLACKBOOK Presentation Readiness -- Spray Windowed Core-Pass Consistency
+ * Fix V1. Computes exactly the four whole-gesture-scoped scalars
+ * `resolveSprayCorePlan` needs (jitter per pass, mean density, mean flow,
+ * travel angle) from `points` -- intended to be called with the GROWING,
+ * COMPLETE gesture-so-far point set (never a windowed slice), so its
+ * result is usable directly as `resolveSprayCorePlan`'s own `override`.
+ */
+export function resolveSprayCoreStatistics(
+  points: readonly SprayPoint[],
+  baseRadius: number,
+  seed: number,
+  cap: SprayCapProfile = STUDIORICH_STOCK_CAP,
+): SprayCorePlanOverride {
+  if (baseRadius <= 0 || points.length === 0) return {};
+  const effectiveRadius = baseRadius * cap.footprintRadiusScale;
+  const samples = resolveSprayCoreSamplePoints(points, baseRadius, cap);
+  const meanDensity = samples.length > 0 ? samples.reduce((sum, s) => sum + s.densityFactor, 0) / samples.length : 1;
+  const meanFlow = samples.length > 0 ? samples.reduce((sum, s) => sum + s.flowFactor, 0) / samples.length : 1;
+  const travelAngle = cap.directionalResponse > 0 ? dominantTravelAngle(points) : 0;
+  const passes = Math.max(1, cap.corePasses);
+  const jitter = resolveSprayCoreJitter(seed, effectiveRadius, cap, passes);
+  return { jitter, meanDensity, meanFlow, travelAngle };
+}
+
 /**
  * Revision 4 fix (dotted-pattern root cause): Revision 3's core reused the
  * PARTICLE field's very fine emission spacing (`baseRadius * MIN_STEP_RATIO`,
@@ -1102,17 +1186,65 @@ export function resolveSprayCoreSamplePoints(
   return samples;
 }
 
+/**
+ * BLACKBOOK Presentation Readiness -- Spray Windowed Core-Pass Consistency
+ * Fix V1. Root cause: the live preview (`advanceSprayLivePreview`,
+ * blackbookRuntime.ts) calls this function WINDOWED -- once per trailing
+ * window of points, same windowing pattern `advanceMopLivePreview` uses
+ * for Mop's body pass (see `StrokeMopOptions.lineCap`'s own doc for that
+ * sibling defect). `meanDensity`, `meanFlow`, and `travelAngle` below were,
+ * before this fix, recomputed FRESH on every windowed call, from THAT
+ * WINDOW's own small point subset:
+ * - `meanDensity`/`meanFlow` are averages over `samples`, which were only
+ *   ever this window's own local samples -- a window's own local average
+ *   speed/pressure generally differs from the complete gesture's, so the
+ *   core pass's width/alpha visibly drifted window to window, snapping to
+ *   the whole-gesture value only once canonical repaints.
+ * - `travelAngle` (CALLIGRAPHY cap only) was likewise computed from the
+ *   window's own local point subset, rather than the gesture's own overall
+ *   dominant travel direction.
+ * (`jitterX`/`jitterY`/`widthJitter` were NOT actually part of this defect
+ * -- `createSeededRandom(seed)` with the SAME seed always produces the
+ * SAME first-N draws regardless of how many separate times it's
+ * constructed, so every window's own jitter was already identical to
+ * every other window's, and to canonical's. `resolveSprayCoreJitter` below
+ * still exists and is still used by `override.jitter` -- not because
+ * jitter needed fixing, but so `resolveSprayCoreStatistics` can hand back
+ * one complete, self-contained bundle of every whole-gesture-scoped
+ * scalar this function needs, instead of mixing "needs fixing" and
+ * "already fine" values across two different code paths.)
+ * The canonical commit calls this ONCE on the complete point array -- ONE
+ * whole-gesture mean/angle -- so live drawing visibly "settled" into a
+ * different-width, different-angle core pass the instant pointer-up (Mop)
+ * or the background bake (Spray) replaced it.
+ *
+ * Fixed with `override`: when supplied (by `resolveSprayCoreStatistics`,
+ * called by the live preview on the GROWING, COMPLETE point set every
+ * frame -- never a windowed slice), these four whole-gesture-scoped
+ * scalars are used directly instead of being recomputed from whatever
+ * (possibly windowed) `points` this call received. `jitter` in particular
+ * is unaffected by which window computed it: `resolveSprayCoreJitter` is a
+ * pure function of `(seed, effectiveRadius, cap, passes)` alone, so calling
+ * it from any window (or many times) always returns the identical values a
+ * single canonical call would draw. `meanDensity`/`meanFlow`/`travelAngle`
+ * converge to canonical's own exact values by the final live-preview call
+ * (the one made from the complete, final point set right before pointer-up
+ * takes its snapshot) -- see `resolveSprayCoreStatistics`'s own doc.
+ * Every pre-existing caller (canonical commit, reload, the background
+ * bake) never passes `override` and is byte-identical to before this
+ * option existed.
+ */
 export function resolveSprayCorePlan(
   points: readonly SprayPoint[],
   baseRadius: number,
   seed: number,
   cap: SprayCapProfile = STUDIORICH_STOCK_CAP,
+  override?: SprayCorePlanOverride,
 ): readonly SprayCorePass[] {
   if (baseRadius <= 0 || points.length === 0) return [];
   const effectiveRadius = baseRadius * cap.footprintRadiusScale;
   const samples = resolveSprayCoreSamplePoints(points, baseRadius, cap);
   if (samples.length === 0) return [];
-  const random = createSeededRandom(seed);
   const passes = Math.max(1, cap.corePasses);
   const nominalWidth = Math.max(0.6, effectiveRadius * 2 * cap.coreWidthRatio);
   const passAlphaBudget = cap.coreAlpha / Math.sqrt(passes);
@@ -1122,8 +1254,8 @@ export function resolveSprayCorePlan(
   // single stroke-level scalar rather than the particle field's per-emission
   // resolution -- consistent with this pass's own "continuity is this
   // layer's only job" doc above).
-  const meanDensity = samples.reduce((sum, s) => sum + s.densityFactor, 0) / samples.length;
-  const meanFlow = samples.reduce((sum, s) => sum + s.flowFactor, 0) / samples.length;
+  const meanDensity = override?.meanDensity ?? (samples.reduce((sum, s) => sum + s.densityFactor, 0) / samples.length);
+  const meanFlow = override?.meanFlow ?? (samples.reduce((sum, s) => sum + s.flowFactor, 0) / samples.length);
   // SPRAY INSTRUMENT EXPRESSION PASS: replaces the previous hardcoded
   // clamp(meanDensity, 0.8, 1.2) -- STOCK's own motionFootprintRange (0.2)
   // reproduces that exact prior clamp, zero behavior change for any
@@ -1135,8 +1267,9 @@ export function resolveSprayCorePlan(
   const motionWidthFactor = clamp(meanDensity, 1 - cap.motionFootprintRange, 1 + cap.motionFootprintRange);
   // CALLIGRAPHY cap support -- see `directionalWidthFactor`'s own doc.
   // Exactly 1 (no change) for every cap with directionalResponse: 0.
-  const travelAngle = cap.directionalResponse > 0 ? dominantTravelAngle(points) : 0;
+  const travelAngle = override?.travelAngle ?? (cap.directionalResponse > 0 ? dominantTravelAngle(points) : 0);
   const directionalFactor = directionalWidthFactor(travelAngle, cap);
+  const jitterPerPass = override?.jitter ?? resolveSprayCoreJitter(seed, effectiveRadius, cap, passes);
 
   const passesOut: SprayCorePass[] = [];
   for (let pass = 0; pass < passes; pass += 1) {
@@ -1145,9 +1278,7 @@ export function resolveSprayCorePlan(
     // genuinely CONTINUOUS path (a per-point jitter would reintroduce
     // small zig-zags at fine spacing); the passes still differ from each
     // other, and from one Mark to the next, deterministically.
-    const jitterX = (random() - 0.5) * effectiveRadius * cap.coreJitterRatio;
-    const jitterY = (random() - 0.5) * effectiveRadius * cap.coreJitterRatio;
-    const widthJitter = 1 + (random() - 0.5) * cap.coreWidthJitterRatio;
+    const { jitterX, jitterY, widthJitter } = jitterPerPass[pass] ?? { jitterX: 0, jitterY: 0, widthJitter: 1 };
     const jittered: SprayCorePoint[] = samples.length === 1
       ? [samples[0], samples[0]].map((p) => ({ x: p.x + jitterX, y: p.y + jitterY, densityFactor: p.densityFactor, flowFactor: p.flowFactor }))
       : samples.map((p) => ({ x: p.x + jitterX, y: p.y + jitterY, densityFactor: p.densityFactor, flowFactor: p.flowFactor }));

@@ -53,6 +53,7 @@ import {
   finalizeSprayParticles,
   resolveSprayCapProfile,
   resolveSprayDripPlans,
+  resolveSprayCoreStatistics,
   hashSeed,
   DEFAULT_SPRAY_CAP_ID,
   STUDIORICH_STOCK_CAP,
@@ -640,13 +641,34 @@ function advanceMopLivePreview(): void {
   liveBakedPointCount = activePoints.length;
   if (windowScreenPoints.length < 2) return;
   const dabs = resolveMopDabPlan(windowScreenPoints, baseRadius, mopDabOrdinalOffset);
+  // BLACKBOOK Presentation Readiness -- Mop Dab-Duplication Seam Fix V1.
+  // `dabs[0]` (for every non-first window) is the SAME dab as the
+  // previous window's own LAST dab -- proven identical by construction,
+  // since both windows resolve a dab plan that includes the shared
+  // boundary point (kept for the body pass's own segment continuity, see
+  // below). `mopDabOrdinalOffset`'s own bookkeeping already accounts for
+  // this (`dabs.length - 1` for non-first windows) so ORDINAL numbering
+  // was never wrong -- but the PAINT call below used to pass the FULL,
+  // undeduplicated `dabs` array, so that shared dab got a SECOND
+  // `fillMopDab` radial-gradient fill composited directly on top of the
+  // first, at every window boundary throughout the gesture (not just the
+  // ends) -- a visibly darker/denser dab at each seam that disappears the
+  // instant pointer-up replaces the live preview with one canonical,
+  // never-duplicated dab plan. This mirrors `mopDeposition.test.ts`'s own
+  // `simulateWindowedDabs` test harness, which has always had to drop
+  // this exact duplicate (`dabs.slice(1)`) to prove windowed-vs-canonical
+  // equivalence -- the real paint call never applied that same dedup
+  // until now.
+  const dabsToPaint = isFirstWindow ? dabs : dabs.slice(1);
   // BLACKBOOK Presentation Readiness -- Mop/Spray Windowed Continuous-Pass
   // Seam Fix V1 -- see StrokeMopOptions.lineCap's own doc. "butt" here
   // (never the canonical commit's own default "round") stops this
   // window's own body-pass end cap from double-compositing a darker
   // round disc over the next window's own start cap at their shared
-  // boundary point.
-  strokeMop(livePreviewLayers.mop.context, windowScreenPoints, scaledStyle, operation.id, { dabs, lineCap: "butt" });
+  // boundary point. The BODY pass itself still uses the full
+  // `windowScreenPoints` (including the shared boundary point) for path
+  // continuity -- only the DAB list passed here is deduplicated.
+  strokeMop(livePreviewLayers.mop.context, windowScreenPoints, scaledStyle, operation.id, { dabs: dabsToPaint, lineCap: "butt" });
   // The window's own first dab duplicates the previous window's own last
   // dab (the shared 1-point overlap, kept for the BODY pass's segment
   // continuity) -- subtracting 1 here (except for the gesture's first
@@ -681,12 +703,16 @@ function activeSprayScreenPoints(): readonly { readonly x: number; readonly y: n
  * Only the newly-added particles are painted (flat fill, the primitive
  * 1003C already proved sufficiently cheap for live use) onto the never-
  * cleared `livePreviewCanvas` -- O(new particles), never O(total
- * particles). Core passes are resolved and painted exactly as before this
- * batch -- same per-window slice, routed through the SAME `strokeSpray`
- * core-pass logic every canonical caller already uses (via its own
- * `particles: []` override, so strokeSpray paints core passes only, never
- * re-resolving or re-painting the particle field itself) -- nothing about
- * core-pass behavior changes here.
+ * particles). Core passes are painted per-window via the SAME
+ * `strokeSpray` core-pass logic every canonical caller already uses (via
+ * its own `particles: []` override, so strokeSpray paints core passes
+ * only, never re-resolving or re-painting the particle field itself) --
+ * but see `resolveSprayCorePlan`'s own "Spray Windowed Core-Pass
+ * Consistency Fix V1" doc: mean density/flow and travel angle (the
+ * genuinely window-inconsistent scalars -- jitter was never actually
+ * affected, see that doc) are now computed from the complete, growing
+ * point set (`resolveSprayCoreStatistics`, below), not recomputed fresh
+ * from each window's own small local subset.
  */
 function advanceSprayLivePreview(): void {
   const operation = activeOperation(activePoints);
@@ -706,7 +732,17 @@ function advanceSprayLivePreview(): void {
     // pass(es) only (StrokeSprayOptions.coreLineCap) -- the particle layer
     // is untouched, still `[]` here, still painted incrementally via
     // paintSprayParticles below.
-    strokeSpray(livePreviewLayers.spray.context, windowScreenPoints, scaledStyle, operation.id, cap, { particles: [], coreLineCap: "butt" });
+    //
+    // BLACKBOOK Presentation Readiness -- Spray Windowed Core-Pass
+    // Consistency Fix V1 -- `coreOverride` is computed from `screenPoints`
+    // (the COMPLETE, growing gesture-so-far point set, never
+    // `windowScreenPoints`) so every window's own core pass uses the SAME
+    // whole-gesture mean density/flow and travel angle a single canonical
+    // call would, not values freshly recomputed from that window's own
+    // small local point range. See `resolveSprayCorePlan`'s own doc for
+    // the full mechanism.
+    const coreOverride = resolveSprayCoreStatistics(screenPoints, baseRadius, hashSeed(operation.id), cap);
+    strokeSpray(livePreviewLayers.spray.context, windowScreenPoints, scaledStyle, operation.id, cap, { particles: [], coreLineCap: "butt", coreOverride });
   }
 
   const previousParticleCount = sprayParticleCursor?.particles.length ?? 0;
