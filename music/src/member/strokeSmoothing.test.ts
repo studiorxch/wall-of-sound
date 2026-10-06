@@ -748,6 +748,51 @@ describe("strokeMop -- Mop Material Calibration V1", () => {
       expect(explicitUndefined.calls).toEqual(withoutOptions.calls);
     });
   });
+
+  /**
+   * BLACKBOOK Presentation Readiness -- Mop/Spray Windowed Continuous-Pass
+   * Seam Fix V1. See `StrokeMopOptions.lineCap`'s own doc for the full
+   * mechanism this closes: a "round" cap at a live-preview window's own
+   * shared boundary point gets composited TWICE (once by each adjacent
+   * window), reading as a visibly darker "bead" that then disappears the
+   * instant pointer-up repaints canonically in one single, uncapped-interior
+   * call -- the actual mechanism behind "Mop visibly changes after
+   * pointer-up," independent of (and in addition to) the dab-ordinal
+   * catch-up timing Batch B already fixed.
+   */
+  describe("lineCap option -- Mop/Spray Windowed Continuous-Pass Seam Fix V1", () => {
+    it("defaults to a round body-pass cap, byte-identical to every pre-existing caller (canonical commit, reload) that never passes it", () => {
+      const { ctx } = fakeMopContext();
+      strokeMop(ctx as never, points, style, "mark-a");
+      expect(ctx.lineCap).toBe("round");
+    });
+
+    it("an explicit lineCap is actually threaded through to the body pass, not silently ignored", () => {
+      const { ctx } = fakeMopContext();
+      strokeMop(ctx as never, points, style, "mark-a", { lineCap: "butt" });
+      expect(ctx.lineCap).toBe("butt");
+    });
+
+    it("two adjacent windowed calls, sharing one boundary point, both painted with lineCap \"butt\" -- the live preview's own call pattern -- never carry a \"round\" cap at that shared point, which is what previously double-composited a darker seam there", () => {
+      const windowA = points.slice(0, 3); // shares points[2] with windowB's own first point
+      const windowB = points.slice(2);
+      const a = fakeMopContext();
+      strokeMop(a.ctx as never, windowA, style, "mark-a", { lineCap: "butt" });
+      expect(a.ctx.lineCap).toBe("butt");
+      const b = fakeMopContext();
+      strokeMop(b.ctx as never, windowB, style, "mark-a", { lineCap: "butt" });
+      expect(b.ctx.lineCap).toBe("butt");
+    });
+
+    it("omitting lineCap is byte-identical to no options at all", () => {
+      const withoutOptions = fakeMopContext();
+      strokeMop(withoutOptions.ctx as never, points, style, "mark-a");
+      const explicitUndefined = fakeMopContext();
+      strokeMop(explicitUndefined.ctx as never, points, style, "mark-a", { lineCap: undefined });
+      expect(explicitUndefined.calls).toEqual(withoutOptions.calls);
+      expect(explicitUndefined.ctx.lineCap).toBe(withoutOptions.ctx.lineCap);
+    });
+  });
 });
 
 describe("strokeSpray -- Spray Material Calibration V1", () => {
@@ -970,6 +1015,47 @@ describe("strokeSpray -- Spray Material Calibration V1", () => {
       const flat = fakeMopContext();
       strokeSpray(flat.ctx as never, points, style, "mark-a", undefined, { particles: explicitParticles, particleRendering: "flat" });
       expect(flat.createRadialGradientCallCount).toBe(0);
+    });
+  });
+
+  /**
+   * BLACKBOOK Presentation Readiness -- Mop/Spray Windowed Continuous-Pass
+   * Seam Fix V1. Mirrors Mop's own `lineCap` option exactly, applied to
+   * Spray's CORE pass(es) -- see `StrokeMopOptions.lineCap`'s doc for the
+   * shared mechanism. Spray's own live preview (`advanceSprayLivePreview`)
+   * windows the CORE pass the same way Mop windows its body pass, and
+   * `resolveSprayCorePlan` draws up to 3 independently-jittered passes per
+   * call -- each one its own "round"-capped stroke -- so the seam defect
+   * this fixes was 3x as dense for Spray as for Mop before this fix.
+   */
+  describe("coreLineCap option -- Mop/Spray Windowed Continuous-Pass Seam Fix V1", () => {
+    it("defaults to a round core-pass cap, byte-identical to every pre-existing caller (canonical commit, reload, the background bake) that never passes it", () => {
+      const { ctx } = fakeMopContext();
+      strokeSpray(ctx as never, points, style, "mark-a");
+      expect(ctx.lineCap).toBe("round");
+    });
+
+    it("an explicit coreLineCap is actually threaded through to the core pass(es), not silently ignored", () => {
+      const { ctx } = fakeMopContext();
+      strokeSpray(ctx as never, points, style, "mark-a", undefined, { coreLineCap: "butt" });
+      expect(ctx.lineCap).toBe("butt");
+    });
+
+    it("composes with particles: [] -- the live preview's own exact call shape (windowed core pass, no particle painting)", () => {
+      const { ctx, calls } = fakeMopContext();
+      strokeSpray(ctx as never, points, style, "mark-a", undefined, { particles: [], coreLineCap: "butt" });
+      expect(ctx.lineCap).toBe("butt");
+      expect(calls.filter((call) => call.startsWith("arc(")).length).toBe(0); // particles still suppressed
+      expect(calls.filter((call) => call === "stroke").length).toBeGreaterThan(0); // core passes still painted
+    });
+
+    it("omitting coreLineCap is byte-identical to no options at all", () => {
+      const withoutOptions = fakeMopContext();
+      strokeSpray(withoutOptions.ctx as never, points, style, "mark-a");
+      const explicitUndefined = fakeMopContext();
+      strokeSpray(explicitUndefined.ctx as never, points, style, "mark-a", undefined, { coreLineCap: undefined });
+      expect(explicitUndefined.calls).toEqual(withoutOptions.calls);
+      expect(explicitUndefined.ctx.lineCap).toBe(withoutOptions.ctx.lineCap);
     });
   });
 });

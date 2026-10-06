@@ -566,6 +566,48 @@ const MOP_DAB_ALPHA_RANGE = 0.3;
 export interface StrokeMopOptions {
   readonly dabOrdinalOffset?: number;
   readonly dabs?: readonly MopDab[];
+  /**
+   * BLACKBOOK Presentation Readiness -- Mop/Spray Windowed Continuous-Pass
+   * Seam Fix V1. Defaults to `"round"`, byte-identical to every existing
+   * caller (canonical commit, reload) that never passes it.
+   *
+   * Root cause this fixes: the BODY pass (Pass 1 below) strokes a raw
+   * polyline with `ctx.lineCap = "round"`. The live preview
+   * (`advanceMopLivePreview`, blackbookRuntime.ts) paints this pass
+   * WINDOWED -- one `strokeMop` call per trailing window of points,
+   * composited onto an accumulating canvas that is never cleared between
+   * windows (by design -- full-gesture redraw every frame was exactly
+   * what Drawing Latency V1 exists to avoid). Each window's own path has
+   * its OWN start/end caps; a "round" cap draws a filled semicircular disc
+   * (radius = half the line width) at each endpoint. Two adjacent windows
+   * SHARE their boundary point (kept for dab-plan continuity, see
+   * `resolveMopDabPlan`'s own "1-point overlap" doc) -- so that exact
+   * pixel gets a round-cap disc painted TWICE, once as window N's own end
+   * cap and once as window N+1's own start cap, composited via
+   * `source-over` at `MOP_BODY_ALPHA` each time. Two `source-over` passes
+   * at the same alpha over the same pixels is strictly more opaque than
+   * one (`1 - (1-a)^2 > a`) -- at `MOP_BODY_ALPHA = 0.78` this reads as a
+   * visibly darker "bead" at EVERY window boundary during live drawing.
+   * The canonical commit (`drawOperation`, pointer-up) strokes the
+   * COMPLETE point array in ONE call -- one path, one `stroke()`, no
+   * internal caps at all (only `lineJoin: "round"` at interior vertices,
+   * which never double-composites) -- so every one of those beads
+   * disappears the instant pointer-up swaps live preview for canonical,
+   * which is exactly the "the stroke visibly changes after pointer-up"
+   * symptom physical acceptance kept reproducing. `advanceMopLivePreview`
+   * now passes `"butt"` for its own windowed calls: a butt cap paints
+   * nothing beyond the path's own endpoint, so the shared boundary point
+   * is never double-composited. Since `resolveMopDabPlan`'s own points
+   * are already proven prefix/window-stable (1003E), the point at that
+   * boundary is identical whichever window computed it, so two
+   * butt-capped segments meeting there read as one continuous line --
+   * only the gesture's own TRUE start/end (not every window seam) differ
+   * from canonical's round caps during live drawing, a one-point,
+   * sub-pixel-scale difference versus the previous whole-stroke "beaded"
+   * texture, and even that is gone the instant pointer-up repaints
+   * canonically.
+   */
+  readonly lineCap?: CanvasLineCap;
 }
 
 export function strokeMop(
@@ -580,7 +622,7 @@ export function strokeMop(
   const baseRadius = style.width * 0.5;
 
   ctx.save();
-  ctx.lineCap = "round";
+  ctx.lineCap = options?.lineCap ?? "round";
   ctx.lineJoin = "round";
   ctx.globalCompositeOperation = "source-over";
 
@@ -726,6 +768,16 @@ export function strokeMaterialDrip(
 export interface StrokeSprayOptions {
   readonly particleRendering?: "gradient" | "flat";
   /**
+   * BLACKBOOK Presentation Readiness -- Mop/Spray Windowed Continuous-Pass
+   * Seam Fix V1. Defaults to `"round"`, byte-identical to every existing
+   * caller (canonical commit, reload, the background bake) that never
+   * passes it. The live preview's own windowed call (`advanceSprayLivePreview`,
+   * blackbookRuntime.ts) passes `"butt"` instead -- see this option's own
+   * doc on `strokeMop`'s identical `lineCap` option for the full mechanism;
+   * applies here to the CORE pass(es) only, never the particle layer.
+   */
+  readonly coreLineCap?: CanvasLineCap;
+  /**
    * SPRAY POINTER-UP RECONCILIATION V1 -- when supplied, `strokeSpray`
    * paints EXACTLY this particle list instead of calling
    * `resolveSprayParticlePlan` itself. The live preview (via its own
@@ -775,7 +827,7 @@ export function strokeSpray(
 
   ctx.save();
   ctx.globalCompositeOperation = "source-over";
-  ctx.lineCap = "round";
+  ctx.lineCap = options?.coreLineCap ?? "round";
   ctx.lineJoin = "round";
   for (const pass of resolveSprayCorePlan(points, baseRadius, seed, cap)) {
     if (pass.points.length < 2) continue;

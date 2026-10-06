@@ -640,7 +640,13 @@ function advanceMopLivePreview(): void {
   liveBakedPointCount = activePoints.length;
   if (windowScreenPoints.length < 2) return;
   const dabs = resolveMopDabPlan(windowScreenPoints, baseRadius, mopDabOrdinalOffset);
-  strokeMop(livePreviewLayers.mop.context, windowScreenPoints, scaledStyle, operation.id, { dabs });
+  // BLACKBOOK Presentation Readiness -- Mop/Spray Windowed Continuous-Pass
+  // Seam Fix V1 -- see StrokeMopOptions.lineCap's own doc. "butt" here
+  // (never the canonical commit's own default "round") stops this
+  // window's own body-pass end cap from double-compositing a darker
+  // round disc over the next window's own start cap at their shared
+  // boundary point.
+  strokeMop(livePreviewLayers.mop.context, windowScreenPoints, scaledStyle, operation.id, { dabs, lineCap: "butt" });
   // The window's own first dab duplicates the previous window's own last
   // dab (the shared 1-point overlap, kept for the BODY pass's segment
   // continuity) -- subtracting 1 here (except for the gesture's first
@@ -694,7 +700,13 @@ function advanceSprayLivePreview(): void {
   const windowScreenPoints = screenPoints.slice(windowStart);
   liveBakedPointCount = activePoints.length;
   if (windowScreenPoints.length >= 2) {
-    strokeSpray(livePreviewLayers.spray.context, windowScreenPoints, scaledStyle, operation.id, cap, { particles: [] });
+    // BLACKBOOK Presentation Readiness -- Mop/Spray Windowed Continuous-Pass
+    // Seam Fix V1 -- same mechanism as Mop's own body pass (see
+    // StrokeMopOptions.lineCap's doc), applied here to Spray's CORE
+    // pass(es) only (StrokeSprayOptions.coreLineCap) -- the particle layer
+    // is untouched, still `[]` here, still painted incrementally via
+    // paintSprayParticles below.
+    strokeSpray(livePreviewLayers.spray.context, windowScreenPoints, scaledStyle, operation.id, cap, { particles: [], coreLineCap: "butt" });
   }
 
   const previousParticleCount = sprayParticleCursor?.particles.length ?? 0;
