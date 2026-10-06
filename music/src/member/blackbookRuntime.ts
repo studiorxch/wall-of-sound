@@ -1556,6 +1556,21 @@ canvas.addEventListener("pointerup", (event) => {
       // keeps the exact synchronous path it already had.
       beginSprayCanonicalBake(operation);
     } else {
+      // MOP POINTER-UP LIVE-PREVIEW CATCH-UP V1 -- mirrors
+      // beginSprayCanonicalBake's own first-line `advanceSprayLivePreview()`
+      // call. `pointermove` only `scheduleRender()`s (deferred to the next
+      // animation frame); `pointerup` fires synchronously and is never
+      // guaranteed to be preceded by that frame actually running, so
+      // `activePoints` can already hold points `liveBakedPointCount`/
+      // `mopDabOrdinalOffset` haven't processed yet. Advancing once more
+      // here, before `activePoints` is read for the canonical commit below,
+      // guarantees those cursors have consumed every source point this
+      // gesture collected -- the same invariant 1003E already established
+      // for Spray's own pointer-up transition, now also held for Mop's.
+      // Idempotent when there's nothing new (the common case, same as
+      // Spray's own call): `advanceMopLivePreview` no-ops once
+      // `liveBakedPointCount` already equals `activePoints.length`.
+      if (operation.operation === "mop") advanceMopLivePreview();
       // DRAWING LATENCY V1 -- bakes this ONE just-committed Mark into the
       // cache incrementally (no full-array rebuild needed for the common
       // single-commit path) by calling the exact same, unmodified

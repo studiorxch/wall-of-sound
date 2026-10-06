@@ -246,6 +246,67 @@ describe("MOP/SPRAY POINTER-UP WYSIWYG V1 -- live/canonical dab-rendering equiva
     expect(withDefault).toEqual(withExplicitZero);
   });
 
+  /**
+   * BLACKBOOK Presentation Readiness -- Mop Pointer-Up Live-Preview Catch-Up
+   * V1. Mirrors `simulateWindowedDabs` above, but driven by an explicit
+   * sequence of "baked up to" checkpoints instead of one uniform frame
+   * size -- so an irregular cadence (ordinary small windows, then a single
+   * large final jump) can be modeled directly. This is what
+   * `blackbookRuntime.ts`'s `pointerup` handler now does: ordinary
+   * `scheduleRender()`-driven windows advance `liveBakedPointCount` a
+   * little at a time, then one explicit `advanceMopLivePreview()` call
+   * (mirroring Spray's own `advanceSprayLivePreview()` catch-up) jumps
+   * straight from wherever the live preview last got to, to the complete,
+   * final point set -- simulating a `pointerup` that fires before the next
+   * scheduled animation frame ever runs.
+   */
+  function simulateIrregularWindowedDabs(points: readonly MopPoint[], baseRadius: number, bakedCheckpoints: readonly number[]): MopDab[] {
+    const result: MopDab[] = [];
+    let dabOrdinalOffset = 0;
+    let baked = 0;
+    for (const nextBaked of bakedCheckpoints) {
+      const windowStart = Math.max(0, baked - 1);
+      const windowPoints = points.slice(windowStart, nextBaked);
+      const isFirstWindow = baked === 0;
+      baked = nextBaked;
+      if (windowPoints.length < 2) continue;
+      const dabs = resolveMopDabPlan(windowPoints, baseRadius, dabOrdinalOffset);
+      result.push(...(isFirstWindow ? dabs : dabs.slice(1)));
+      dabOrdinalOffset += dabs.length - (isFirstWindow ? 0 : 1);
+    }
+    return result;
+  }
+
+  it("a pointer-up catch-up (one large final window jumping straight to the complete point set, skipping the normal small-window cadence) never skips any pending source points -- identical to the canonical complete-gesture plan", () => {
+    const points = zigZagStroke(120);
+    const baseRadius = 10;
+    const canonical = resolveMopDabPlan(points, baseRadius);
+    // Ordinary small windows advance only partway (simulating however many
+    // animation frames actually ran before release), THEN ONE final
+    // checkpoint jumps straight to points.length -- exactly what calling
+    // `advanceMopLivePreview()` once, synchronously, inside `pointerup`
+    // does relative to whatever `liveBakedPointCount` was left at.
+    const caughtUp = simulateIrregularWindowedDabs(points, baseRadius, [5, 10, 17, 23, 31, points.length]);
+    expect(caughtUp).toEqual(canonical);
+  });
+
+  it("pointer-up catch-up from a cold start (no animation frame EVER ran for this gesture -- e.g. a very fast tap-and-release) still produces the complete, correct plan in one jump", () => {
+    const points = zigZagStroke(40);
+    const baseRadius = 10;
+    const canonical = resolveMopDabPlan(points, baseRadius);
+    const caughtUp = simulateIrregularWindowedDabs(points, baseRadius, [points.length]);
+    expect(caughtUp).toEqual(canonical);
+  });
+
+  it("a catch-up call that finds nothing new (the live preview was already fully caught up) is a safe no-op -- matches advanceMopLivePreview's own early return when windowPoints.length < 2", () => {
+    const points = zigZagStroke(60);
+    const baseRadius = 10;
+    // Already fully baked, then "catch up" is called again with the same endpoint.
+    const alreadyCaughtUp = simulateIrregularWindowedDabs(points, baseRadius, [points.length, points.length]);
+    const calledOnce = simulateIrregularWindowedDabs(points, baseRadius, [points.length]);
+    expect(alreadyCaughtUp).toEqual(calledOnce);
+  });
+
   it("perpX/perpY are a unit vector perpendicular to the dab's own originating segment direction, stable regardless of neighboring dabs", () => {
     const points: MopPoint[] = [{ x: 0, y: 0 }, { x: 100, y: 0 }]; // a pure horizontal segment
     const dabs = resolveMopDabPlan(points, 10);
