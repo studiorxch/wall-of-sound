@@ -66,6 +66,7 @@ import {
 } from "./sprayDeposition";
 import { resolveMopDabPlan, resolveMopDripPlans } from "./mopDeposition";
 import { partitionPendingBakesBySurvival } from "./pendingBakeLifecycle";
+import { computeMemberGatedControlsState } from "./memberGatedControls";
 import { createBlackbookHomeSurface } from "../home/blackbookHomeSurface";
 
 function required<T>(value: T | null, error: string): T { if (!value) throw new Error(error); return value; }
@@ -780,8 +781,23 @@ function render(): void {
   // BLACKBOOK CLEAR + Single-Step Undo V1 -- Undo must stay enabled right
   // after CLEAR even though `operations` is now empty (there's a pending
   // `lastClearSnapshot` to restore).
-  undoButton.disabled = memberState.status !== "signedIn" || (operations.length === 0 && lastClearSnapshot === null);
-  clearButton.disabled = memberState.status !== "signedIn" || operations.length === 0;
+  // BLACKBOOK Presentation Readiness -- NEW/PAGES-+ Signed-Out Disable V1 --
+  // one shared, pure decision (`computeMemberGatedControlsState`) for every
+  // sign-in-gated control, rather than four independently-maintained
+  // copies of `memberState.status !== "signedIn"`. NEW and the PAGES
+  // drawer's own "+" are gated here for the first time -- both buttons'
+  // own click handlers (`startNewPage`) already silently no-op when signed
+  // out, unchanged; this only makes that existing rule visible, exactly
+  // like UNDO/CLEAR already did.
+  const gatedControls = computeMemberGatedControlsState({
+    signedIn: memberState.status === "signedIn",
+    hasOperations: operations.length > 0,
+    hasPendingClearSnapshot: lastClearSnapshot !== null,
+  });
+  undoButton.disabled = gatedControls.undoDisabled;
+  clearButton.disabled = gatedControls.clearDisabled;
+  newButton.disabled = gatedControls.newDisabled;
+  pagesDrawerNewButton.disabled = gatedControls.pagesNewDisabled;
   // Drawing Shell V1: `aria-pressed` is now the one canonical active-tool
   // state signal (same convention Map's toolbar already used) -- CSS reads
   // it directly ([aria-pressed="true"]), so a screen reader and the visual
