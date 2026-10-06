@@ -674,6 +674,10 @@ function advanceMopLivePreview(): void {
   if (activePoints.length < 2) return;
   const scaledStyle = { ...operation.style, width: operation.style.width * widthScale() };
   const screenPoints = activePoints.map((point) => docToScreen(point));
+  // Mop Pencil-Density Diagnostic V1 -- reads the already-computed
+  // `screenPoints.length` (exactly what this call is about to pass to
+  // `strokeMop`'s body pass); see that block's own doc.
+  if (mopPencilDiagnostics?.enabled) mopPencilDiagnostics.liveRedrawBodyPointCounts.push(screenPoints.length);
   livePreviewContext.clearRect(0, 0, width(), height());
   strokeMop(livePreviewLayers.mop.context, screenPoints, scaledStyle, operation.id);
 }
@@ -893,6 +897,127 @@ function scheduleRender(): void {
 function renderNow(): void {
   if (renderDiagnostics) renderDiagnostics.renderNowCalls += 1;
   renderScheduler.renderNow();
+}
+
+/**
+ * BLACKBOOK Presentation Readiness -- Mop Pencil-Density Diagnostic V1.
+ * Temporary, on-demand, dev-only instrument for the physical-acceptance
+ * question raised by the iPad/Apple Pencil "fine bands during the active
+ * gesture, solid at pointer-up" report: whether Apple Pencil's much denser
+ * `getCoalescedEvents()` stream feeds a meaningfully larger/denser raw
+ * point set into Mop's repeatedly-redrawn body pass than mouse input ever
+ * does, and whether live-preview animation frames fall behind while that's
+ * happening -- NOT whether that density is the actual cause of the visible
+ * WebKit rendering artifact itself (a separate, not-yet-demonstrated
+ * question this instrument cannot answer on its own).
+ *
+ * Disabled by default (`enabled: false`) even in DEV -- arm it from the
+ * browser console immediately before drawing ONE test gesture:
+ * `window.__blackbookMopPencilDiagnostics.enabled = true`. Reports exactly
+ * ONCE, at that gesture's own `pointerup`, as a single structured
+ * `console.log` (never continuous logging while drawing, per instruction),
+ * then disables itself again -- re-arm for the next comparison gesture
+ * (e.g. the mouse-input control). Reads already-computed values at their
+ * own existing call sites (`samples.length` in `pointermove`,
+ * `screenPoints.length` in `advanceMopLivePreview`, `operation.points` at
+ * `pointerup`) -- adds no new DOM/canvas reads, no new point-capture or
+ * rendering logic, and only ONE independent per-frame side effect (a
+ * `requestAnimationFrame` loop that does nothing but push a timestamp,
+ * used solely to measure whether frames are falling behind -- it never
+ * touches the canvas and cannot itself perturb rasterization). Zero
+ * footprint outside DEV, and zero behavioral effect even in DEV unless
+ * explicitly armed. Does not change Mop geometry, deposition, rendering,
+ * point capture, sampling, or any accepted commit's own behavior.
+ */
+interface MopPencilDiagnosticsState {
+  enabled: boolean;
+  pointerType: string | null;
+  coalescedCounts: number[];
+  liveRedrawBodyPointCounts: number[];
+  frameTimestamps: number[];
+  frameLoopId: number | null;
+}
+const mopPencilDiagnostics: MopPencilDiagnosticsState | null = import.meta.env.DEV
+  ? { enabled: false, pointerType: null, coalescedCounts: [], liveRedrawBodyPointCounts: [], frameTimestamps: [], frameLoopId: null }
+  : null;
+if (mopPencilDiagnostics) {
+  (window as unknown as { __blackbookMopPencilDiagnostics?: MopPencilDiagnosticsState }).__blackbookMopPencilDiagnostics = mopPencilDiagnostics;
+}
+function mopPencilDiagnosticFrameTick(): void {
+  if (!mopPencilDiagnostics?.enabled) return;
+  mopPencilDiagnostics.frameTimestamps.push(performance.now());
+  mopPencilDiagnostics.frameLoopId = requestAnimationFrame(mopPencilDiagnosticFrameTick);
+}
+function sortedCopy(values: readonly number[]): number[] { return [...values].sort((a, b) => a - b); }
+function percentileOf(sorted: readonly number[], p: number): number {
+  if (sorted.length === 0) return 0;
+  return sorted[Math.min(sorted.length - 1, Math.max(0, Math.floor(p * (sorted.length - 1))))];
+}
+function medianOf(sorted: readonly number[]): number {
+  if (sorted.length === 0) return 0;
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid];
+}
+function meanOf(values: readonly number[]): number {
+  return values.length === 0 ? 0 : values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+/** Reports once, at this gesture's own pointerup, from `operation.points` (still the complete, uncleared `activePoints` at this call site) plus whatever this gesture accumulated in `mopPencilDiagnostics`' own arrays -- then disables itself. */
+function reportMopPencilDiagnostics(points: readonly { readonly x: number; readonly y: number }[]): void {
+  if (!mopPencilDiagnostics) return;
+  const screenPoints = points.map((point) => docToScreen(point));
+  const spacings: number[] = [];
+  let pathLength = 0;
+  for (let index = 1; index < screenPoints.length; index += 1) {
+    const dx = screenPoints[index].x - screenPoints[index - 1].x;
+    const dy = screenPoints[index].y - screenPoints[index - 1].y;
+    const distance = Math.hypot(dx, dy);
+    spacings.push(distance);
+    pathLength += distance;
+  }
+  const sortedSpacings = sortedCopy(spacings);
+  const sortedCoalesced = sortedCopy(mopPencilDiagnostics.coalescedCounts);
+  const sortedLiveCounts = sortedCopy(mopPencilDiagnostics.liveRedrawBodyPointCounts);
+  const frameDeltas: number[] = [];
+  for (let index = 1; index < mopPencilDiagnostics.frameTimestamps.length; index += 1) {
+    frameDeltas.push(mopPencilDiagnostics.frameTimestamps[index] - mopPencilDiagnostics.frameTimestamps[index - 1]);
+  }
+  const sortedFrameDeltas = sortedCopy(frameDeltas);
+  console.log("[BLACKBOOK Mop Pencil Diagnostic]", {
+    pointerType: mopPencilDiagnostics.pointerType,
+    totalRawPoints: points.length,
+    finalCanonicalBodyPointCount: points.length, // same array, same strokeMop call -- see this module's own doc
+    coalescedSamplesPerPointerEvent: mopPencilDiagnostics.coalescedCounts.length === 0 ? null : {
+      pointermoveDispatches: mopPencilDiagnostics.coalescedCounts.length,
+      max: Math.max(...mopPencilDiagnostics.coalescedCounts),
+      mean: meanOf(mopPencilDiagnostics.coalescedCounts),
+      median: medianOf(sortedCoalesced),
+    },
+    interPointSpacingPx: spacings.length === 0 ? null : {
+      min: sortedSpacings[0],
+      mean: meanOf(spacings),
+      median: medianOf(sortedSpacings),
+      p10Low: percentileOf(sortedSpacings, 0.1),
+    },
+    approxPathLengthPx: pathLength,
+    liveRedraws: mopPencilDiagnostics.liveRedrawBodyPointCounts.length === 0 ? null : {
+      count: mopPencilDiagnostics.liveRedrawBodyPointCounts.length,
+      maxBodyPointsPerRedraw: Math.max(...mopPencilDiagnostics.liveRedrawBodyPointCounts),
+      medianBodyPointsPerRedraw: medianOf(sortedLiveCounts),
+    },
+    frameTiming: frameDeltas.length === 0 ? null : {
+      sampledDeltas: frameDeltas.length,
+      maxDeltaMs: Math.max(...frameDeltas),
+      p95DeltaMs: percentileOf(sortedFrameDeltas, 0.95),
+      deltasOver32msOneDroppedFrameAt60fps: frameDeltas.filter((delta) => delta > 32).length,
+      deltasOver50ms: frameDeltas.filter((delta) => delta > 50).length,
+    },
+  });
+  mopPencilDiagnostics.enabled = false;
+  if (mopPencilDiagnostics.frameLoopId !== null) {
+    cancelAnimationFrame(mopPencilDiagnostics.frameLoopId);
+    mopPencilDiagnostics.frameLoopId = null;
+  }
+  console.log("[BLACKBOOK Mop Pencil Diagnostic] disabled after this report -- re-arm with window.__blackbookMopPencilDiagnostics.enabled = true before the next gesture.");
 }
 
 // Calibration V1 (revised): quadratic-midpoint smoothing (see
@@ -1401,6 +1526,17 @@ canvas.addEventListener("pointerdown", (event) => {
   // the redraw.
   mopLivePreviewPointCount = 0;
   livePreviewContext.clearRect(0, 0, width(), height());
+  // Mop Pencil-Density Diagnostic V1 -- armed only via the console flag;
+  // see that block's own doc. Resets this gesture's own arrays and starts
+  // the independent, canvas-untouched frame-timing loop.
+  if (mopPencilDiagnostics?.enabled && activeSupply === "mop") {
+    mopPencilDiagnostics.pointerType = event.pointerType;
+    mopPencilDiagnostics.coalescedCounts = [];
+    mopPencilDiagnostics.liveRedrawBodyPointCounts = [];
+    mopPencilDiagnostics.frameTimestamps = [];
+    if (mopPencilDiagnostics.frameLoopId !== null) cancelAnimationFrame(mopPencilDiagnostics.frameLoopId);
+    mopPencilDiagnostics.frameLoopId = requestAnimationFrame(mopPencilDiagnosticFrameTick);
+  }
   renderNow();
 });
 canvas.addEventListener("pointermove", (event) => {
@@ -1423,6 +1559,9 @@ canvas.addEventListener("pointermove", (event) => {
   // only how many points are RECORDED, not any interpolation/smoothing.
   const coalesced = typeof event.getCoalescedEvents === "function" ? event.getCoalescedEvents() : [];
   const samples = coalesced.length > 0 ? coalesced : [event];
+  // Mop Pencil-Density Diagnostic V1 -- reads the already-computed
+  // `samples.length`, nothing else; see that block's own doc.
+  if (mopPencilDiagnostics?.enabled && activeSupply === "mop") mopPencilDiagnostics.coalescedCounts.push(samples.length);
   for (const sample of samples) {
     // SPRAY PERSISTENCE V1 -- a genuinely long/slow Spray gesture, now that
     // each point also carries tMs/pressure (roughly 3x a legacy {x,y}
@@ -1639,6 +1778,11 @@ canvas.addEventListener("pointerup", (event) => {
       // consistent with `activePoints.length` going into the commit below
       // (harmless, idempotent once there's nothing new -- the common case).
       if (operation.operation === "mop") advanceMopLivePreview();
+      // Mop Pencil-Density Diagnostic V1 -- one-shot report, only when
+      // armed, read from `operation.points` (the complete, still-populated
+      // `activePoints` this exact gesture captured) before anything below
+      // clears it; see that block's own doc.
+      if (mopPencilDiagnostics?.enabled && operation.operation === "mop") reportMopPencilDiagnostics(operation.points);
       // DRAWING LATENCY V1 -- bakes this ONE just-committed Mark into the
       // cache incrementally (no full-array rebuild needed for the common
       // single-commit path) by calling the exact same, unmodified
