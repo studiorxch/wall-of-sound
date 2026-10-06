@@ -141,6 +141,21 @@
       #status-toast[data-visible="true"] { opacity: 1; }
       #status-toast[data-kind="error"] { color: #ff9a9a; }
 
+      /* BLACKBOOK Presentation Readiness -- Top-Bar Narrow-Viewport
+         Collision Fix V1. #status-toast (centered, z-index 11) overlapped
+         #event-music (the RADIO island, left-anchored, z-index 9) below
+         900px -- confirmed on iPad portrait (834px) and narrower: the
+         persistent signed-out "Private page -- sign in to draw" message
+         sat directly over RADIO OFF/the volume slider for the entire
+         signed-out session. Same breakpoint/stacking strategy as
+         #bottom-bar's own narrow-viewport fallback above: move the toast
+         below the RADIO island's own measured height (16px top offset +
+         ~52px tall) instead of overlapping it. Desktop (>900px)
+         positioning is untouched. */
+      @media (max-width: 900px) {
+        #status-toast { top: 76px; }
+      }
+
       /**
        * BLACKBOOK Embedded PAGES Drawer V1 -- replaces the previous MY
        * PAGES modal/overlay. This is a permanent LAYOUT primitive, not an
