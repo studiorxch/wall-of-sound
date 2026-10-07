@@ -1,8 +1,39 @@
 <!doctype html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>HOME — HOST-03 development</title>
 <style>
-body{font:16px system-ui;margin:1.5rem}button{margin:.25rem;padding:.5rem}iframe{display:block;width:100%;height:70vh;min-height:220px;border:1px solid #888}iframe[hidden]{display:none}pre{white-space:pre-wrap}#failure{color:#a00}
-#home-topbar{display:flex;align-items:center;justify-content:space-between;gap:1rem}
+body{font:16px system-ui;margin:0;padding:0;overflow:hidden}button{margin:.25rem;padding:.5rem}pre{white-space:pre-wrap}#failure{color:#a00}
+/* Presentation V1 -- normal (non-debug) mode: the hosted surface fills
+   the viewport; only the persistent avatar overlays it. See
+   `#dev-scaffolding`'s own doc below for what debug mode restores. This
+   is a pure CSS/visibility change -- no element is removed, no ID
+   renamed, no navigation/identity logic touched; every `required("#...")`
+   lookup in homeRuntime.ts still finds exactly the same element it
+   always did. */
+iframe#surface{display:block;position:fixed;inset:0;width:100vw;height:100vh;border:0;z-index:0}
+iframe#surface[hidden]{display:none}
+#home-topbar{position:fixed;top:12px;right:12px;z-index:10;display:flex;align-items:center;justify-content:flex-end;gap:1rem}
+#home-topbar h1{display:none}
+/* HOST-03 Presentation V1 -- dev scaffolding (runtime id, the raw surface
+   nav buttons, route/phase/failure readouts, the diagnostics dump) is
+   hidden in normal presentation so the hosted surface -- not this
+   harness's own debug chrome -- is what visually occupies the viewport.
+   Nothing here is removed from the DOM or stops running: homeRuntime.ts's
+   own navigation/render logic is completely unaware of this class and
+   keeps writing into these same elements exactly as before: toggling
+   `.debug` only changes whether a human can SEE them. Restore with
+   `#debug` in the URL hash (never `location.search`, which `parseHomeSearch`
+   -- homeRoutes.ts -- strictly allowlists; an unrecognized search param
+   there would fail the route entirely, which is exactly the navigation-
+   semantics change this batch must not make). See the inline script at
+   the bottom of this file for the (tiny, isolated, non-navigational)
+   hash check. */
+#dev-scaffolding{display:none}
+body.debug{overflow:visible;margin:1.5rem}
+body.debug iframe#surface{position:static;width:100%;height:70vh;min-height:220px;border:1px solid #888}
+body.debug iframe#surface[hidden]{display:none}
+body.debug #home-topbar{position:static;justify-content:space-between}
+body.debug #home-topbar h1{display:block}
+body.debug #dev-scaffolding{display:block}
 /* MEMBER-01A -- the persistent avatar/account control. Lives here, a
    sibling of #surface, never inside it, so iframe surface replacement
    can never touch it. */
@@ -21,13 +52,34 @@ body{font:16px system-ui;margin:1.5rem}button{margin:.25rem;padding:.5rem}iframe
 .member-avatar-edit-actions .member-avatar-menu-item{flex:1;text-align:center}
 </style></head>
 <body>
+<iframe id="surface" title="HOME surface"></iframe>
 <div id="home-topbar">
   <h1>HOME — HOST-03 development</h1>
   <div id="member-avatar-root"></div>
 </div>
+<div id="dev-scaffolding">
 <p>Development HOME: real MAP/SUBWAY, real BLACKBOOK, and (STATION-01) the real Bay Ridge Av Station Cover. MEMBER-01A: the persistent avatar above owns identity/account presentation for a hosted session.</p>
 <p>HOME runtime: <code id="runtime-id"></code></p>
 <nav aria-label="Test surface navigation"><button id="map">MAP / SUBWAY</button><button id="blackbook">BLACKBOOK</button><button id="station">STATION (Bay Ridge Av)</button><button id="platform">PLATFORM (Bay Ridge Av)</button><button id="back">Back</button><button id="forward">Forward</button><button id="retry">Retry surface</button></nav>
 <p id="route"></p><p id="phase" role="status"></p><p id="failure" role="alert"></p>
-<iframe id="surface" title="HOME surface"></iframe><pre id="diagnostics"></pre>
-<script type="module" src="/src/home/homeRuntime.ts"></script></body></html>
+<pre id="diagnostics"></pre>
+</div>
+<script type="module" src="/src/home/homeRuntime.ts"></script>
+<script>
+// HOST-03 Presentation V1 -- isolated, non-navigational. Toggles the
+// `.debug` class purely from `location.hash` (`#debug`), never
+// `location.search` (which homeRuntime.ts's own navigation/identity code
+// owns exclusively via parseHomeSearch -- see the CSS comment above for
+// why this must stay off that channel). Does not import, call, or
+// reference anything from homeRuntime.ts/homeNavigation.ts/
+// homeSurfaceContract.ts -- cannot affect routing, mounts, or
+// getMemberIdentity. Append `#debug` to the URL (and reload, or just
+// edit the hash -- this listens live) to restore the runtime id, surface
+// nav buttons, route/phase/failure text, and the diagnostics dump.
+function applyDebugModeFromHash() {
+  document.body.classList.toggle("debug", location.hash === "#debug");
+}
+applyDebugModeFromHash();
+window.addEventListener("hashchange", applyDebugModeFromHash);
+</script>
+</body></html>
